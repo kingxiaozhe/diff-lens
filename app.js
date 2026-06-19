@@ -1,0 +1,312 @@
+// ClearDiff popup/page — wires UI to the local diff engine. No network calls.
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const ta = $("text-a"), tb = $("text-b");
+  const optWs = $("opt-ws"), optCase = $("opt-case"), optWrap = $("opt-wrap");
+  const optBlank = $("opt-blank"), optChar = $("opt-char"), optWsShow = $("opt-ws-show");
+  const result = $("result"), stats = $("stats");
+  const navPrev = $("nav-prev"), navNext = $("nav-next"), navCount = $("nav-count");
+  let view = "unified";
+  let showWs = false;
+  let hunks = [], hunkIdx = -1;
+
+  const hasChrome = typeof chrome !== "undefined" && chrome.storage && chrome.storage.local;
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  // Escape + (optionally) reveal whitespace as faint glyphs — BC-style.
+  function fmt(s) {
+    let h = esc(s);
+    if (showWs) {
+      h = h.replace(/\t/g, '<span class="ws">→</span>').replace(/ /g, '<span class="ws">·</span>');
+    }
+    return h;
+  }
+  function renderWords(words) {
+    return words.map((w) => {
+      const t = fmt(w.text);
+      if (w.type === "del") return "<del>" + t + "</del>";
+      if (w.type === "add") return "<ins>" + t + "</ins>";
+      return t;
+    }).join("");
+  }
+  function opts() {
+    return {
+      ignoreWhitespace: optWs.checked,
+      ignoreCase: optCase.checked,
+      ignoreBlankLines: optBlank.checked,
+      charLevel: optChar.checked,
+    };
+  }
+
+  function numCell(a, b) {
+    return '<div class="num"><span>' + (a == null ? "" : a) + '</span> <span>' + (b == null ? "" : b) + "</span></div>";
+  }
+  function urow(cls, sign, aNum, bNum, inner) {
+    return '<div class="row ' + cls + '">' + numCell(aNum, bNum) + '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
+  }
+  // Single-column rows shared by Unified and Inline — the ONLY difference is how a
+  // CHANGE renders: Unified shows two rows (− old / + new); Inline shows one row with
+  // the original text and the edits marked in place (strike-through + insert).
+  function renderColumn(out, inlineChange) {
+    const html = []; let prevImp = false;
+    for (const r of out.rows) {
+      const imp = r.type === "del" || r.type === "add" || r.type === "change";
+      const hs = imp && !prevImp ? " hstart" : "";
+      if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
+      else if (r.type === "minor") html.push(urow("minor", "≈", r.aNum, r.bNum, renderWords(inlineChange ? r.words : r.bWords)));
+      else if (r.type === "del") html.push(urow("del" + hs, "−", r.aNum, null, fmt(r.text)));
+      else if (r.type === "add") html.push(urow("add" + hs, "+", null, r.bNum, fmt(r.text)));
+      else if (r.type === "change") {
+        if (inlineChange) {
+          html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words)));
+        } else {
+          html.push(urow("change" + hs, "−", r.aNum, null, renderWords(r.aWords)));
+          html.push(urow("change", "+", null, r.bNum, renderWords(r.bWords)));
+        }
+      }
+      prevImp = imp;
+    }
+    return html.join("");
+  }
+  function renderUnified(out) { return renderColumn(out, false); }
+  function renderInline(out) { return renderColumn(out, true); }
+  function scol(cls, num, inner) {
+    return '<div class="scol ' + cls + '"><div class="snum">' + (num == null ? "" : num) + '</div><div class="stxt">' + inner + "</div></div>";
+  }
+  function renderSplit(out) {
+    const html = []; let prevImp = false;
+    for (const r of out.rows) {
+      const imp = r.type === "del" || r.type === "add" || r.type === "change";
+      const hs = imp && !prevImp ? " hstart" : "";
+      let left, right;
+      if (r.type === "equal") {
+        left = scol("equal", r.aNum, fmt(r.text)); right = scol("equal", r.bNum, fmt(r.text));
+      } else if (r.type === "minor") {
+        left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor", r.bNum, renderWords(r.bWords));
+      } else if (r.type === "del") {
+        left = scol("del", r.aNum, fmt(r.text)); right = scol("blank", null, "");
+      } else if (r.type === "add") {
+        left = scol("blank", null, ""); right = scol("add", r.bNum, fmt(r.text));
+      } else { // change
+        left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg", r.bNum, renderWords(r.bWords));
+      }
+      html.push('<div class="srow' + hs + '">' + left + right + "</div>");
+      prevImp = imp;
+    }
+    return html.join("");
+  }
+
+  // Error boundary: a pathological input must never leave the UI broken or throw
+  // uncaught — show a friendly message and keep the tool usable.
+  function render() {
+    try {
+      renderDiff();
+    } catch (e) {
+      result.innerHTML = '<div class="empty">Couldn’t compare this input' +
+        (e && e.message ? " (" + esc(String(e.message)) + ")" : "") + ". Try smaller or simpler text.</div>";
+      stats.textContent = "Comparison error";
+      hunks = []; hunkIdx = -1; updateNav();
+    }
+  }
+  function renderDiff() {
+    const a = ta.value, b = tb.value;
+    if (a === "" && b === "") {
+      result.innerHTML = '<div class="empty">Type or paste text in both boxes to compare.</div>';
+      stats.textContent = "Type or paste text in both boxes to compare.";
+      indexHunks();
+      return;
+    }
+    const out = window.ClearDiff.compare(a, b, opts());
+    if (out.stats.identical) {
+      const why = (optWs.checked || optCase.checked || optBlank.checked) ? " (with the chosen ignore options)" : "";
+      result.innerHTML = '<div class="empty">✓ The two texts are identical' + why + ".</div>";
+    } else {
+      result.innerHTML = view === "split" ? renderSplit(out) : view === "inline" ? renderInline(out) : renderUnified(out);
+    }
+    const minorTxt = out.stats.minor ? ' · <span class="minorc">≈' + out.stats.minor + " minor</span>" : "";
+    const head = out.stats.onlyMinor ? '<span class="same">No important differences</span> · ' : "";
+    stats.innerHTML = head +
+      '<span class="add">+' + out.stats.added + " added</span> · " +
+      '<span class="del">−' + out.stats.removed + " removed</span>" + minorTxt +
+      " · A: " + out.stats.aLines + " lines, B: " + out.stats.bLines + " lines";
+    indexHunks();
+  }
+
+  // --- difference navigation (BC-style next/prev) ---
+  function indexHunks() {
+    hunks = [].slice.call(result.querySelectorAll(".hstart"));
+    hunkIdx = -1;
+    updateNav();
+  }
+  function updateNav() {
+    if (!navPrev) return;
+    const n = hunks.length;
+    navPrev.disabled = n === 0; navNext.disabled = n === 0;
+    navCount.textContent = n === 0 ? "—" : (hunkIdx < 0 ? (n + (n === 1 ? " diff" : " diffs")) : (hunkIdx + 1) + " / " + n);
+  }
+  function jump(dir) {
+    if (!hunks.length) return;
+    if (hunkIdx < 0) hunkIdx = dir > 0 ? 0 : hunks.length - 1;
+    else hunkIdx = (hunkIdx + dir + hunks.length) % hunks.length;
+    hunks.forEach((h) => h.classList.remove("jumped"));
+    const el = hunks[hunkIdx];
+    el.classList.add("jumped");
+    el.scrollIntoView({ block: "center" });
+    updateNav();
+  }
+
+  function copyResult() {
+    const a = ta.value, b = tb.value;
+    if (a === "" && b === "") return;
+    const out = window.ClearDiff.compare(a, b, opts());
+    const lines = out.rows.map((r) => {
+      if (r.type === "equal") return "  " + r.text;
+      if (r.type === "minor") return "~ " + r.bText;
+      if (r.type === "del") return "- " + r.text;
+      if (r.type === "add") return "+ " + r.text;
+      if (r.type === "change") return "- " + r.aWords.map((w) => w.text).join("") + "\n+ " + r.bWords.map((w) => w.text).join("");
+      return "";
+    });
+    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+      const btn = $("copy"); const old = btn.textContent;
+      btn.textContent = "Copied ✓"; setTimeout(() => (btn.textContent = old), 1200);
+    }).catch(() => {});
+  }
+
+  let t;
+  const schedule = () => { clearTimeout(t); t = setTimeout(render, 120); };
+
+  [ta, tb].forEach((el) => el.addEventListener("input", () => { schedule(); persist(); }));
+  [optWs, optCase, optBlank, optChar].forEach((el) => el.addEventListener("change", () => { render(); persistOpts(); }));
+  optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); persistOpts(); });
+  if (optWsShow) optWsShow.addEventListener("change", () => { showWs = optWsShow.checked; render(); persistOpts(); });
+  $("swap").addEventListener("click", () => {
+    const tmp = ta.value; ta.value = tb.value; tb.value = tmp; render(); persist();
+  });
+  $("copy").addEventListener("click", copyResult);
+  if (navPrev) navPrev.addEventListener("click", () => jump(-1));
+  if (navNext) navNext.addEventListener("click", () => jump(1));
+  document.addEventListener("keydown", (e) => {
+    if (!e.altKey) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); jump(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); jump(-1); }
+  });
+  document.querySelectorAll("[data-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      view = btn.dataset.view;
+      document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b === btn));
+      result.classList.toggle("split", view === "split");
+      render(); persistOpts();
+    });
+  });
+  document.querySelectorAll("[data-clear]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      (btn.dataset.clear === "a" ? ta : tb).value = ""; render(); persist();
+    });
+  });
+
+  // --- local file loading (drag-drop or "open file…") — 100% local via FileReader ---
+  const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB: beyond this, load + render would lag
+  const paneEl = (which) => (which === "a" ? ta : tb);
+  function loadFile(file, which) {
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      stats.textContent = "That file is too large (" + (file.size / 1048576).toFixed(1) +
+        " MB). ClearDiff handles up to " + (MAX_FILE_BYTES / 1048576) + " MB locally.";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => { paneEl(which).value = String(reader.result || ""); render(); persist(); };
+    reader.onerror = () => { stats.textContent = "Couldn’t read that file."; };
+    reader.readAsText(file);
+  }
+  document.querySelectorAll("[data-file]").forEach((btn) => {
+    btn.addEventListener("click", () => { const inp = $("file-" + btn.dataset.file); if (inp) inp.click(); });
+  });
+  ["a", "b"].forEach((which) => {
+    const inp = $("file-" + which);
+    if (inp) inp.addEventListener("change", (e) => { loadFile(e.target.files[0], which); inp.value = ""; });
+    const el = paneEl(which);
+    el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("dragover"); });
+    el.addEventListener("dragleave", () => el.classList.remove("dragover"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault(); el.classList.remove("dragover");
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadFile(f, which);
+    });
+  });
+
+  // --- "Format JSON": structural compare via parse → sort keys → pretty-print ---
+  // Sorting keys makes key-order differences vanish; pretty-printing makes whitespace/
+  // minification differences vanish — so two structurally-equal JSONs become identical.
+  // NOTE: uses native JSON, so integers beyond 2^53 may be reformatted with precision
+  // loss (both sides equally). Big-int-faithful mode is a future option (cf. JSON Keeper).
+  function sortKeys(v) {
+    if (Array.isArray(v)) return v.map(sortKeys);
+    if (v && typeof v === "object") {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = sortKeys(v[k]);
+      return out;
+    }
+    return v;
+  }
+  function formatPane(which) {
+    const el = paneEl(which);
+    const raw = el.value.trim();
+    if (!raw) return false;
+    try { el.value = JSON.stringify(sortKeys(JSON.parse(raw)), null, 2); return true; }
+    catch { return false; }
+  }
+  const fmtBtn = $("fmt-json");
+  if (fmtBtn) fmtBtn.addEventListener("click", () => {
+    const a = formatPane("a"), b = formatPane("b");
+    render(); persist();
+    if (!a && !b) stats.textContent = "No valid JSON to format on either side.";
+    else if (!a || !b) stats.textContent = "Formatted the valid JSON side; the other isn’t valid JSON.";
+  });
+
+  // --- persistence: remember panes + options + pick up right-click captures ---
+  function persist() {
+    if (hasChrome) chrome.storage.local.set({ textA: ta.value, textB: tb.value });
+  }
+  function persistOpts() {
+    if (hasChrome) chrome.storage.local.set({
+      ignoreWhitespace: optWs.checked, ignoreCase: optCase.checked,
+      ignoreBlankLines: optBlank.checked, charLevel: optChar.checked,
+      showWhitespace: showWs, wordWrap: optWrap.checked, view: view,
+    });
+  }
+  function boot() {
+    if (!hasChrome) { render(); return; }
+    chrome.storage.local.get(
+      ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view"],
+      (s) => {
+        if (typeof s.textA === "string") ta.value = s.textA;
+        if (typeof s.textB === "string") tb.value = s.textB;
+        if (typeof s.ignoreWhitespace === "boolean") optWs.checked = s.ignoreWhitespace;
+        if (typeof s.ignoreCase === "boolean") optCase.checked = s.ignoreCase;
+        if (typeof s.ignoreBlankLines === "boolean") optBlank.checked = s.ignoreBlankLines;
+        if (typeof s.charLevel === "boolean") optChar.checked = s.charLevel;
+        if (typeof s.showWhitespace === "boolean" && optWsShow) { optWsShow.checked = s.showWhitespace; showWs = s.showWhitespace; }
+        if (typeof s.wordWrap === "boolean") optWrap.checked = s.wordWrap;
+        if (s.view === "split" || s.view === "unified" || s.view === "inline") view = s.view;
+        result.classList.toggle("wrap", optWrap.checked);
+        result.classList.toggle("split", view === "split");
+        document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+        if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
+        render();
+      }
+    );
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") return;
+      let touched = false;
+      if (changes.textA && ta.value !== changes.textA.newValue) { ta.value = changes.textA.newValue || ""; touched = true; }
+      if (changes.textB && tb.value !== changes.textB.newValue) { tb.value = changes.textB.newValue || ""; touched = true; }
+      if (touched) render();
+    });
+  }
+  boot();
+})();

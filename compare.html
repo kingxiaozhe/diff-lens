@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="app.css" />
+  <title>DiffLens — Compare Text</title>
+</head>
+<body class="page">
+  <header class="bar">
+    <div class="brand">
+      <span class="logo">≠</span>
+      <span class="name">DiffLens</span>
+      <span class="badge" title="Everything runs locally in your browser. Nothing is uploaded.">🔒 100% local · no upload, no account, no ads</span>
+    </div>
+    <div class="tools">
+      <button id="fmt-json" class="toolbtn" title="Parse, sort keys & pretty-print both sides — a structural JSON compare (ignores key order & formatting)">{ } Format JSON</button>
+      <label class="chk"><input type="checkbox" id="opt-ws" /> Ignore whitespace</label>
+      <label class="chk"><input type="checkbox" id="opt-blank" /> Ignore blank lines</label>
+      <label class="chk"><input type="checkbox" id="opt-case" /> Ignore case</label>
+      <label class="chk"><input type="checkbox" id="opt-char" /> Char level</label>
+      <label class="chk"><input type="checkbox" id="opt-ws-show" /> Show whitespace</label>
+      <label class="chk"><input type="checkbox" id="opt-wrap" checked /> Word wrap</label>
+    </div>
+  </header>
+
+  <section class="inputs">
+    <div class="pane">
+      <div class="pane-head"><span>Original (A)</span><span class="pane-actions"><button class="link" data-file="a">open file…</button><button class="link" data-clear="a">clear</button></span></div>
+      <textarea id="text-a" spellcheck="false" placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
+      <input type="file" id="file-a" class="file-input" hidden />
+    </div>
+    <div class="midcol">
+      <button id="swap" class="icon-btn" title="Swap A and B">⇄</button>
+    </div>
+    <div class="pane">
+      <div class="pane-head"><span>Changed (B)</span><span class="pane-actions"><button class="link" data-file="b">open file…</button><button class="link" data-clear="b">clear</button></span></div>
+      <textarea id="text-b" spellcheck="false" placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
+      <input type="file" id="file-b" class="file-input" hidden />
+    </div>
+  </section>
+
+  <section class="resultwrap">
+    <div class="result-head">
+      <span id="stats" class="stats">Type or paste text in both boxes to compare.</span>
+      <div class="head-right">
+        <div class="navgrp" role="group" aria-label="Jump between differences">
+          <button id="nav-prev" class="nav-btn" title="Previous difference (Alt+↑)" disabled>↑</button>
+          <span id="nav-count" class="nav-count">—</span>
+          <button id="nav-next" class="nav-btn" title="Next difference (Alt+↓)" disabled>↓</button>
+        </div>
+        <div class="seg" role="group" aria-label="View">
+          <button id="view-unified" class="seg-btn on" data-view="unified">Unified</button>
+          <button id="view-split" class="seg-btn" data-view="split">Split</button>
+          <button id="view-inline" class="seg-btn" data-view="inline" title="Original text with changes marked inline">Inline</button>
+        </div>
+        <button id="copy" class="link" title="Copy the diff as text">Copy result</button>
+      </div>
+    </div>
+    <div id="result" class="result wrap" aria-live="polite"></div>
+  </section>
+
+  <script src="diff.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
