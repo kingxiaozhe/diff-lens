@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DiffLens — Private Text Compare",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fast, 100% private text diff. Paste or right-click two pieces of text — nothing uploaded, no account, no ads.",
   "icons": {
     "16": "icons/icon-16.png",

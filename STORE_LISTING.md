@@ -51,7 +51,7 @@ Compare two pieces of text (or files) locally and highlight the differences.
 ## Permission justifications
 - **storage**:
 ```
-Used to save the user's two texts and view/compare preferences locally so they are restored automatically. Stored on-device only, never transmitted.
+Used to save the user's two texts, any comparisons they choose to save to History, and their view/compare preferences locally so they are restored automatically. Stored on-device only, never transmitted.
 ```
 - **contextMenus**:
 ```
@@ -85,7 +85,8 @@ https://kingxiaozhe.github.io/diff-lens/privacy.html
 - Support URL: `https://github.com/kingxiaozhe/diff-lens/issues`
 
 ## Build the upload zip
+From the repo root, zip only the runtime files (exclude docs/tests/design/store-assets):
 ```
-node ~/.claude/skills/chrome-ext-reborn/scripts/build-zip.mjs extensions/clear-diff
+zip -r difflens-upload.zip manifest.json background.js compare.html app.js app.css diff.js history.js icons
 ```
 (Only you can register the $5 developer account and click "Submit for review.")
