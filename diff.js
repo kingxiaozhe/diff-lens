@@ -203,9 +203,48 @@
       }
     }
     if (dels.length || adds.length) flushBlock(dels, adds);
+    const moved = detectMoves(rows);
     const identical = added === 0 && removed === 0 && minor === 0;
     const onlyMinor = added === 0 && removed === 0 && minor > 0;
-    return { rows, stats: { added, removed, minor, identical, onlyMinor, aLines: rawA, bLines: rawB } };
+    return { rows, stats: { added, removed, minor, moved, identical, onlyMinor, aLines: rawA, bLines: rawB } };
+  }
+
+  // A line is "movable" (worth move-detecting) only if it's non-trivial: long enough
+  // and containing an alphanumeric char. This keeps lines like "}", ");", "" or "---"
+  // from being matched all over the place and producing noise.
+  function isMovable(text) {
+    const s = text.trim();
+    return s.length >= 3 && /[A-Za-z0-9]/.test(s);
+  }
+
+  // Detect moved lines: a pure-deletion line whose EXACT text reappears as a pure
+  // addition elsewhere is annotated on both sides (r.moved + r.movePartnerNum = the
+  // partner's source line number) so the UI can show "moved from/to line N" instead
+  // of an unrelated delete + add. Conservative: exact text match, non-trivial lines,
+  // each add claimed once. Returns the number of moved pairs.
+  function detectMoves(rows) {
+    const addsByText = new Map();
+    for (const r of rows) {
+      if (r.type === "add" && isMovable(r.text)) {
+        const list = addsByText.get(r.text);
+        if (list) list.push(r); else addsByText.set(r.text, [r]);
+      }
+    }
+    if (addsByText.size === 0) return 0;
+    let moved = 0;
+    const used = new Set();
+    for (const r of rows) {
+      if (r.type !== "del" || !isMovable(r.text)) continue;
+      const list = addsByText.get(r.text);
+      if (!list) continue;
+      const partner = list.find((x) => !used.has(x));
+      if (!partner) continue;
+      used.add(partner);
+      r.moved = true; r.movePartnerNum = partner.bNum;
+      partner.moved = true; partner.movePartnerNum = r.aNum;
+      moved++;
+    }
+    return moved;
   }
 
   // --- export helpers (pure, unit-testable) ------------------------------------

@@ -63,6 +63,41 @@ function ok(cond, msg) { if (cond) pass++; else { fail++; console.error("✗ " +
   ok(change && change.aNum === 3 && change.bNum === 3, "source line numbers survive ignoreBlankLines (line 3)");
 })();
 
+// --- move detection ---
+(() => {
+  // A distinctive line moved from the top to the bottom.
+  const a = "function moveMe() { return 42; }\nkeep1\nkeep2\nkeep3";
+  const b = "keep1\nkeep2\nkeep3\nfunction moveMe() { return 42; }";
+  const out = compare(a, b);
+  eq(out.stats.moved, 1, "a relocated distinctive line is detected as 1 move");
+  const del = out.rows.find((r) => r.type === "del" && r.moved);
+  const add = out.rows.find((r) => r.type === "add" && r.moved);
+  ok(del && add, "both sides of the move are annotated");
+  ok(del.movePartnerNum === add.bNum && add.movePartnerNum === del.aNum, "move partners point at each other's line numbers");
+})();
+
+(() => {
+  // A trivial line (just "}") relocating between unchanged context is NOT a move.
+  const a = "alpha\n}\nbeta";
+  const b = "alpha\nbeta\n}";
+  const out = compare(a, b);
+  eq(out.stats.moved, 0, "a relocated trivial line (}) is not counted as a move");
+})();
+
+(() => {
+  // No moves when nothing relocates.
+  const out = compare("alpha\nbeta", "alpha\ngamma");
+  eq(out.stats.moved, 0, "ordinary edits report 0 moves");
+})();
+
+(() => {
+  // Two distinct lines swap places → two moves.
+  const a = "first distinct line\nmiddle\nsecond distinct line";
+  const b = "second distinct line\nmiddle\nfirst distinct line";
+  const out = compare(a, b);
+  eq(out.stats.moved, 2, "swapping two distinctive lines yields 2 moves");
+})();
+
 // --- toUnifiedDiff() ---
 (() => {
   eq(toUnifiedDiff("a\nb", "a\nb"), "", "identical → empty unified diff");

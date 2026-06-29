@@ -25,6 +25,7 @@ WHY IT'S DIFFERENT
 
 FEATURES
 • Word- and character-level highlighting, with smart auto-refine for paths/URLs/IDs.
+• Move detection — a distinctive line that relocated is flagged as "moved" instead of a separate delete + add.
 • Jump between differences (↑/↓ or Alt+↑/↓) with a difference counter.
 • Ignore whitespace, blank lines, or case — ignored differences are dimmed (still visible), not silently dropped.
 • Show whitespace: reveal spaces, tabs and trailing whitespace.

@@ -134,6 +134,7 @@ textarea.dragover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--acc
 .stats .del { color: var(--del-fg); font-weight: 600; }
 .stats .same { color: var(--accent); font-weight: 600; }
 .stats .minorc { color: var(--muted); font-weight: 600; }
+.stats .movedc { color: var(--accent); font-weight: 600; }
 
 .result {
   border: 1px solid var(--border); border-radius: 8px;
@@ -158,6 +159,14 @@ textarea.dragover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--acc
 .row.minor { background: var(--minor-bg); color: var(--muted); }
 .row .sign { flex: 0 0 16px; text-align: center; color: var(--muted); user-select: none; }
 .ws { color: var(--ws); }
+/* moved lines: keep the add/del tint but flag them with an accent edge + badge */
+.row.moved, .scol.moved { box-shadow: inset 3px 0 0 var(--accent); }
+.movetag {
+  margin-left: 8px; padding: 0 6px; border-radius: 999px;
+  font-size: 10px; font-weight: 600; vertical-align: 1px;
+  color: var(--accent); background: var(--bg-soft); border: 1px solid var(--border);
+  white-space: nowrap; user-select: none;
+}
 /* current jump target */
 .row.jumped, .srow.jumped { outline: 2px solid var(--accent); outline-offset: -2px; }
 ins { background: var(--add-word); text-decoration: none; border-radius: 2px; }

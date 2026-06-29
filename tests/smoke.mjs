@@ -77,6 +77,14 @@ try {
   ok((await page.locator("#result .row").count()) > rowsFolded, "expanding a band reveals hidden rows");
   await page.uncheck("#opt-fold");
 
+  // Move detection: a relocated distinctive line is flagged as moved (not add/del).
+  await page.fill("#text-a", "function relocateMe() { return 7; }\nkeepA\nkeepB\nkeepC");
+  await page.fill("#text-b", "keepA\nkeepB\nkeepC\nfunction relocateMe() { return 7; }");
+  await page.waitForFunction(() => document.querySelectorAll("#result .row.moved").length > 0);
+  ok((await page.locator("#result .row.moved").count()) >= 2, "both sides of a move are marked .moved");
+  ok((await page.locator("#result .movetag").count()) >= 2, "moved lines show a 'moved from/to' badge");
+  ok(/moved/.test(await page.textContent("#stats")), "stats report a moved count");
+
   // Comparison history: save → restore → delete (in-memory without chrome storage).
   await page.fill("#text-a", "alpha\nbeta");
   await page.fill("#text-b", "alpha\nGAMMA");

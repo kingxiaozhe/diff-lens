@@ -16,6 +16,9 @@ default and changes are highlighted down to the word.
 - Two-pane compare with a live diff — **unified**, **side-by-side (split)**, or
   **inline** view (one merged column: the original text with edits marked in place).
 - **Word- or character-level highlighting** inside changed lines (toggle).
+- **Move detection** — a distinctive line deleted in one place and re-added in another
+  is flagged as **moved** (with a "moved from/to line N" badge) instead of an unrelated
+  delete + add, and counted separately in the stats.
 - **Format JSON** — one click parses, **sorts keys & pretty-prints** both sides, so
   JSON that differs only in key order or formatting compares as identical and real
   differences stand out (a structural compare).

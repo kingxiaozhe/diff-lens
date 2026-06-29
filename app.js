@@ -39,6 +39,10 @@
       return t;
     }).join("");
   }
+  // Inline badge marking a moved line and where its partner lives.
+  function moveTag(dir, n) {
+    return ' <span class="movetag" title="This line was moved, not added or removed">↕ moved ' + dir + " line " + n + "</span>";
+  }
   function opts() {
     return {
       ignoreWhitespace: optWs.checked,
@@ -70,8 +74,8 @@
       const hs = imp && !prevImp ? " hstart" : "";
       if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
       else if (r.type === "minor") html.push(urow("minor", "≈", r.aNum, r.bNum, renderWords(inlineChange ? r.words : r.bWords)));
-      else if (r.type === "del") html.push(urow("del" + hs, "−", r.aNum, null, fmt(r.text)));
-      else if (r.type === "add") html.push(urow("add" + hs, "+", null, r.bNum, fmt(r.text)));
+      else if (r.type === "del") html.push(urow("del" + hs + (r.moved ? " moved" : ""), "−", r.aNum, null, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")));
+      else if (r.type === "add") html.push(urow("add" + hs + (r.moved ? " moved" : ""), "+", null, r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : "")));
       else if (r.type === "change") {
         if (inlineChange) {
           html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words)));
@@ -101,9 +105,9 @@
       } else if (r.type === "minor") {
         left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor", r.bNum, renderWords(r.bWords));
       } else if (r.type === "del") {
-        left = scol("del", r.aNum, fmt(r.text)); right = scol("blank", null, "");
+        left = scol("del" + (r.moved ? " moved" : ""), r.aNum, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")); right = scol("blank", null, "");
       } else if (r.type === "add") {
-        left = scol("blank", null, ""); right = scol("add", r.bNum, fmt(r.text));
+        left = scol("blank", null, ""); right = scol("add" + (r.moved ? " moved" : ""), r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""));
       } else { // change
         left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg", r.bNum, renderWords(r.bWords));
       }
@@ -151,10 +155,11 @@
       result.innerHTML = view === "split" ? renderSplit(toRender) : view === "inline" ? renderInline(toRender) : renderUnified(toRender);
     }
     const minorTxt = out.stats.minor ? ' · <span class="minorc">≈' + out.stats.minor + " minor</span>" : "";
+    const movedTxt = out.stats.moved ? ' · <span class="movedc">↕' + out.stats.moved + " moved</span>" : "";
     const head = out.stats.onlyMinor ? '<span class="same">No important differences</span> · ' : "";
     stats.innerHTML = head +
       '<span class="add">+' + out.stats.added + " added</span> · " +
-      '<span class="del">−' + out.stats.removed + " removed</span>" + minorTxt +
+      '<span class="del">−' + out.stats.removed + " removed</span>" + minorTxt + movedTxt +
       " · A: " + out.stats.aLines + " lines, B: " + out.stats.bLines + " lines";
     indexHunks();
   }
