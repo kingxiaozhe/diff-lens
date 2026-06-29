@@ -240,6 +240,20 @@
   const schedule = () => { clearTimeout(t); t = setTimeout(render, 120); };
 
   [ta, tb].forEach((el) => el.addEventListener("input", () => { schedule(); persist(); }));
+  // Keep the two input panes scroll-locked so the same region of A and B lines up
+  // while reading long text. A guard flag breaks the A→B→A feedback loop.
+  let syncingScroll = false;
+  function linkScroll(src, dst) {
+    src.addEventListener("scroll", () => {
+      if (syncingScroll) return;
+      syncingScroll = true;
+      dst.scrollTop = src.scrollTop;
+      dst.scrollLeft = src.scrollLeft;
+      requestAnimationFrame(() => { syncingScroll = false; });
+    });
+  }
+  linkScroll(ta, tb);
+  linkScroll(tb, ta);
   [optWs, optCase, optBlank, optChar].forEach((el) => el.addEventListener("change", () => { render(); persistOpts(); }));
   optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); persistOpts(); });
   if (optWsShow) optWsShow.addEventListener("change", () => { showWs = optWsShow.checked; render(); persistOpts(); });

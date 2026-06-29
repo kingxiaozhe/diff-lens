@@ -77,6 +77,22 @@ try {
   ok((await page.locator("#result .row").count()) > rowsFolded, "expanding a band reveals hidden rows");
   await page.uncheck("#opt-fold");
 
+  // Synchronized scrolling: scrolling one input pane moves the other.
+  const many = Array.from({ length: 200 }, (_, i) => "row " + i).join("\n");
+  await page.fill("#text-a", many);
+  await page.fill("#text-b", many);
+  await page.evaluate(() => {
+    const a = document.getElementById("text-a");
+    a.scrollTop = 300;
+    a.dispatchEvent(new Event("scroll"));
+  });
+  await page.waitForFunction(() => document.getElementById("text-b").scrollTop > 0);
+  const synced = await page.evaluate(() => {
+    const a = document.getElementById("text-a"), b = document.getElementById("text-b");
+    return Math.abs(a.scrollTop - b.scrollTop) < 2;
+  });
+  ok(synced, "scrolling input A scrolls input B to match");
+
   ok(errors.length === 0, "no uncaught page errors" + (errors.length ? ": " + errors.join("; ") : ""));
 } finally {
   await browser.close();

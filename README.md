@@ -30,6 +30,8 @@ default and changes are highlighted down to the word.
 - **Export the diff** — copy as plain text, copy/download a standard **unified diff
   (`.patch`, `git apply`-ready), or copy as **Markdown** (a fenced ```` ```diff ````
   block that renders red/green on GitHub).
+- **Synchronized scrolling** — the two input panes scroll-lock so the same region
+  of A and B always lines up while you read long text.
 - Ignore whitespace / ignore blank lines / ignore case; word-wrap; swap A↔B; copy result.
 - **Collapse unchanged** (optional) — on large, mostly-identical inputs, fold long
   runs of unchanged lines into a band you can click to expand (off by default, so
