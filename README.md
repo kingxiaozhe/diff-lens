@@ -32,6 +32,8 @@ default and changes are highlighted down to the word.
   block that renders red/green on GitHub).
 - **Synchronized scrolling** — the two input panes scroll-lock so the same region
   of A and B always lines up while you read long text.
+- **Comparison history** — save a snapshot of the current A/B with one click and
+  restore (or delete) it later from the **History** menu. Stored locally only.
 - Ignore whitespace / ignore blank lines / ignore case; word-wrap; swap A↔B; copy result.
 - **Collapse unchanged** (optional) — on large, mostly-identical inputs, fold long
   runs of unchanged lines into a band you can click to expand (off by default, so
@@ -50,6 +52,7 @@ default and changes are highlighted down to the word.
 ## Develop / test
 
 - Engine + export unit tests (no deps): `node tests/diff-test.mjs`
+- History helper unit tests (no deps): `node tests/history-test.mjs`
 - End-to-end UI smoke (headless Chromium via Playwright): `node tests/smoke.mjs`
 
 See `docs/ARCHITECTURE.md` for design decisions and known limitations.

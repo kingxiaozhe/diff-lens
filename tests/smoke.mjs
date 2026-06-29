@@ -77,6 +77,28 @@ try {
   ok((await page.locator("#result .row").count()) > rowsFolded, "expanding a band reveals hidden rows");
   await page.uncheck("#opt-fold");
 
+  // Comparison history: save → restore → delete (in-memory without chrome storage).
+  await page.fill("#text-a", "alpha\nbeta");
+  await page.fill("#text-b", "alpha\nGAMMA");
+  await page.click("#history summary");
+  ok(await page.locator("#hist-save").isVisible(), "history menu opens");
+  await page.click("#hist-save");
+  await page.waitForSelector("#hist-list .hist-item");
+  ok((await page.locator("#hist-list .hist-item").count()) === 1, "saving adds one history entry");
+  ok(/alpha → alpha/.test(await page.textContent("#hist-list")), "history entry shows a preview");
+  await page.fill("#text-a", "different");
+  await page.fill("#text-b", "different too");
+  await page.evaluate(() => { document.getElementById("history").open = true; });
+  await page.click("#hist-list .hist-restore");
+  await page.waitForFunction(() => document.getElementById("text-a").value === "alpha\nbeta");
+  ok((await page.inputValue("#text-a")) === "alpha\nbeta", "restoring loads saved A");
+  ok((await page.inputValue("#text-b")) === "alpha\nGAMMA", "restoring loads saved B");
+  await page.evaluate(() => { document.getElementById("history").open = true; });
+  await page.click("#hist-list .hist-del");
+  await page.waitForSelector("#hist-list .hist-empty");
+  ok((await page.locator("#hist-list .hist-item").count()) === 0, "deleting removes the entry");
+  await page.keyboard.press("Escape");
+
   // Synchronized scrolling: scrolling one input pane moves the other.
   const many = Array.from({ length: 200 }, (_, i) => "row " + i).join("\n");
   await page.fill("#text-a", many);

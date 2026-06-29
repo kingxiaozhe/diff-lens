@@ -236,6 +236,48 @@
     flashBtn($("dl-patch"), "Saved ✓"); closeExport();
   }
 
+  // --- comparison history (saved snapshots, local only) ------------------------
+  const H = window.DiffLensHistory;
+  let historyList = [];
+  function persistHistory() { if (hasChrome) chrome.storage.local.set({ history: historyList }); }
+  function relTime(ts) {
+    const s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
+  }
+  function renderHistList() {
+    const box = $("hist-list");
+    if (!box) return;
+    if (!historyList.length) { box.innerHTML = '<div class="hist-empty">No saved comparisons yet.</div>'; return; }
+    box.innerHTML = historyList.map((e) =>
+      '<div class="hist-item">' +
+        '<button class="hist-restore" type="button" data-restore="' + esc(e.id) + '" title="Restore this comparison">' +
+          '<span class="hist-prev">' + esc(e.preview) + "</span>" +
+          '<span class="hist-time">' + esc(relTime(e.ts)) + "</span>" +
+        "</button>" +
+        '<button class="hist-del" type="button" data-del="' + esc(e.id) + '" title="Delete" aria-label="Delete saved comparison">✕</button>' +
+      "</div>"
+    ).join("");
+  }
+  function saveCurrent() {
+    const a = ta.value, b = tb.value;
+    if (a === "" && b === "") { stats.textContent = "Nothing to save yet — paste or type some text first."; return; }
+    if (H.tooLarge(a, b)) { stats.textContent = "This comparison is too large to save to history."; return; }
+    const entry = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6), ts: Date.now(), a: a, b: b, preview: H.preview(a, b) };
+    historyList = H.add(historyList, entry);
+    persistHistory(); renderHistList();
+    flashBtn($("hist-save"), "Saved ✓");
+  }
+  function restoreHist(id) {
+    const e = historyList.find((x) => x.id === id);
+    if (!e) return;
+    ta.value = e.a; tb.value = e.b; render(); persist();
+    const d = $("history"); if (d) d.open = false;
+  }
+  function delHist(id) { historyList = H.remove(historyList, id); persistHistory(); renderHistList(); }
+
   let t;
   const schedule = () => { clearTimeout(t); t = setTimeout(render, 120); };
 
@@ -272,6 +314,18 @@
   { const e = $("copy-diff"); if (e) e.addEventListener("click", copyUnified); }
   { const e = $("copy-md"); if (e) e.addEventListener("click", copyMarkdown); }
   { const e = $("dl-patch"); if (e) e.addEventListener("click", downloadPatch); }
+  { const e = $("hist-save"); if (e) e.addEventListener("click", saveCurrent); }
+  { const box = $("hist-list"); if (box) box.addEventListener("click", (e) => {
+      const r = e.target.closest("[data-restore]");
+      const d = e.target.closest("[data-del]");
+      if (!r && !d) return;
+      // Stop the document outside-click handler from running: re-rendering the list
+      // below detaches the clicked node, which would make its contains() check fail
+      // and spuriously close the menu. (Delete keeps the menu open to remove several.)
+      e.stopPropagation();
+      if (r) restoreHist(r.dataset.restore);
+      else delHist(d.dataset.del);
+    }); }
   // Clickable stats: clicking the +added / −removed / ≈minor counts jumps to the
   // first difference so the numbers double as navigation.
   stats.addEventListener("click", (e) => {
@@ -279,15 +333,22 @@
     if (!hunks.length) return;
     hunkIdx = -1; jump(1);
   });
-  // Close the export menu on an outside click or Escape.
+  // Close any open dropdown menu on an outside click. (Clicking one summary lands
+  // outside the other, so this also keeps them mutually exclusive.)
   document.addEventListener("click", (e) => {
-    const d = $("export");
-    if (d && d.open && !d.contains(e.target)) d.open = false;
+    ["export", "history"].forEach((id) => {
+      const d = $(id);
+      if (d && d.open && !d.contains(e.target)) d.open = false;
+    });
   });
   if (navPrev) navPrev.addEventListener("click", () => jump(-1));
   if (navNext) navNext.addEventListener("click", () => jump(1));
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { const d = $("export"); if (d && d.open) { d.open = false; return; } }
+    if (e.key === "Escape") {
+      let closed = false;
+      ["export", "history"].forEach((id) => { const d = $(id); if (d && d.open) { d.open = false; closed = true; } });
+      if (closed) return;
+    }
     if (!e.altKey) return;
     if (e.key === "ArrowDown") { e.preventDefault(); jump(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); jump(-1); }
@@ -379,9 +440,9 @@
     });
   }
   function boot() {
-    if (!hasChrome) { render(); return; }
+    if (!hasChrome) { render(); renderHistList(); return; }
     chrome.storage.local.get(
-      ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view", "foldUnchanged"],
+      ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view", "foldUnchanged", "history"],
       (s) => {
         if (typeof s.textA === "string") ta.value = s.textA;
         if (typeof s.textB === "string") tb.value = s.textB;
@@ -396,8 +457,10 @@
         result.classList.toggle("wrap", optWrap.checked);
         result.classList.toggle("split", view === "split");
         document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+        if (Array.isArray(s.history)) historyList = s.history;
         if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
         render();
+        renderHistList();
       }
     );
     chrome.storage.onChanged.addListener((changes, area) => {

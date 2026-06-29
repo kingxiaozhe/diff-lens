@@ -207,6 +207,25 @@ del { background: var(--del-word); text-decoration: none; border-radius: 2px; }
 }
 .foldbtn:hover { background: var(--gutter); text-decoration: underline; }
 
+/* comparison history dropdown */
+.hist-menu { min-width: 280px; }
+.hist-list { max-height: 320px; overflow: auto; margin-top: 2px; }
+.hist-empty { color: var(--muted); font-size: 12px; padding: 8px 10px; }
+.hist-item { display: flex; align-items: stretch; gap: 2px; }
+.hist-restore {
+  flex: 1; min-width: 0; border: none; background: none; cursor: pointer;
+  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  padding: 6px 8px; border-radius: 6px; color: var(--text);
+}
+.hist-restore:hover { background: var(--bg-soft); }
+.hist-prev { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-time { font-size: 10px; color: var(--muted); }
+.hist-del {
+  flex: 0 0 auto; border: none; background: none; cursor: pointer;
+  color: var(--muted); padding: 0 8px; border-radius: 6px; font-size: 12px;
+}
+.hist-del:hover { background: var(--del-bg); color: var(--del-fg); }
+
 /* clickable stats double as "jump to first difference" */
 .stats .add, .stats .del, .stats .minorc { cursor: pointer; }
 .stats .add:hover, .stats .del:hover, .stats .minorc:hover { text-decoration: underline; }
