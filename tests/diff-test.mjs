@@ -8,7 +8,7 @@ import vm from "node:vm";
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(here, "..", "diff.js"), "utf8");
 vm.runInThisContext(src);
-const { compare, toUnifiedDiff, toMarkdown } = globalThis.ClearDiff;
+const { compare, toUnifiedDiff, toMarkdown, foldRows } = globalThis.ClearDiff;
 
 let pass = 0, fail = 0;
 function eq(actual, expected, msg) {
@@ -126,6 +126,49 @@ function ok(cond, msg) { if (cond) pass++; else { fail++; console.error("✗ " +
   // here we just assert every B line appears on a ' ' or '+' line.
   const emitted = ud.split("\n").filter((l) => l.startsWith(" ") || l.startsWith("+")).map((l) => l.slice(1));
   for (const line of B.split("\n")) ok(emitted.includes(line), "B line reproduced in diff: " + JSON.stringify(line));
+})();
+
+// --- foldRows() ---
+(() => {
+  // 30 identical lines + one change in the middle.
+  const lines = Array.from({ length: 30 }, (_, i) => "L" + i);
+  const a = lines.join("\n");
+  const b2 = lines.slice(); b2[15] = "CHANGED";
+  const out = compare(a, b2.join("\n"));
+  const folded = foldRows(out.rows, 3, 10);
+  const folds = folded.filter((r) => r.type === "fold");
+  eq(folds.length, 2, "one change in a long file → two fold blocks (before & after)");
+  // The changed row and 3 context rows on each side stay visible.
+  ok(folded.some((r) => r.type === "change"), "the change itself is never folded");
+  // Folds + visible rows must reconstruct exactly the original rows.
+  const rebuilt = folded.flatMap((r) => (r.type === "fold" ? r.hidden : [r]));
+  eq(rebuilt.length, out.rows.length, "expanding all folds restores every row");
+  ok(folds.every((f) => f.count === f.hidden.length), "fold count matches hidden rows");
+  ok(folds.every((f) => typeof f.key === "string" && f.key.length > 1), "each fold has a stable key");
+})();
+
+(() => {
+  // Short unchanged runs are not worth folding.
+  const out = compare("a\nb\nc\nx", "a\nb\nc\ny");
+  const folded = foldRows(out.rows, 3, 10);
+  eq(folded.filter((r) => r.type === "fold").length, 0, "short runs are left expanded");
+})();
+
+(() => {
+  // No changes at all → nothing to anchor on → whole body folds if long enough.
+  const same = Array.from({ length: 30 }, (_, i) => "S" + i).join("\n");
+  const out = compare(same, same);
+  ok(out.stats.identical, "identical long inputs are identical");
+})();
+
+(() => {
+  // Stable keys: same input folds to the same keys twice (so expand state survives re-render).
+  const lines = Array.from({ length: 40 }, (_, i) => "K" + i);
+  const b2 = lines.slice(); b2[20] = "Z";
+  const out = compare(lines.join("\n"), b2.join("\n"));
+  const k1 = foldRows(out.rows, 3, 10).filter((r) => r.type === "fold").map((r) => r.key);
+  const k2 = foldRows(out.rows, 3, 10).filter((r) => r.type === "fold").map((r) => r.key);
+  eq(k1, k2, "fold keys are deterministic across calls");
 })();
 
 console.log("\n" + pass + " passed, " + fail + " failed");

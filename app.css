@@ -199,6 +199,14 @@ del { background: var(--del-word); text-decoration: none; border-radius: 2px; }
 }
 .export-item:hover { background: var(--bg-soft); color: var(--accent); }
 
+/* collapsed band of unchanged lines */
+.row.fold { background: var(--bg-soft); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.foldbtn {
+  width: 100%; border: none; background: none; cursor: pointer;
+  color: var(--accent); font: inherit; padding: 3px 8px; text-align: center;
+}
+.foldbtn:hover { background: var(--gutter); text-decoration: underline; }
+
 /* clickable stats double as "jump to first difference" */
 .stats .add, .stats .del, .stats .minorc { cursor: pointer; }
 .stats .add:hover, .stats .del:hover, .stats .minorc:hover { text-decoration: underline; }

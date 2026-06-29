@@ -31,6 +31,9 @@ default and changes are highlighted down to the word.
   (`.patch`, `git apply`-ready), or copy as **Markdown** (a fenced ```` ```diff ````
   block that renders red/green on GitHub).
 - Ignore whitespace / ignore blank lines / ignore case; word-wrap; swap A↔B; copy result.
+- **Collapse unchanged** (optional) — on large, mostly-identical inputs, fold long
+  runs of unchanged lines into a band you can click to expand (off by default, so
+  prose still shows in full).
 - Real source line numbers, preserved even when blank lines are ignored.
 - Panes, view, and options persist between opens.
 - Light & dark, follows your system theme.
@@ -45,6 +48,7 @@ default and changes are highlighted down to the word.
 ## Develop / test
 
 - Engine + export unit tests (no deps): `node tests/diff-test.mjs`
+- End-to-end UI smoke (headless Chromium via Playwright): `node tests/smoke.mjs`
 
 See `docs/ARCHITECTURE.md` for design decisions and known limitations.
 

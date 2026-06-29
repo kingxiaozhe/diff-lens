@@ -285,5 +285,44 @@
     return "```diff\n" + ud + "```\n";
   }
 
-  root.ClearDiff = { compare, diffWords, toUnifiedDiff, toMarkdown };
+  // Collapse long runs of unchanged (equal) rows into a single foldable placeholder,
+  // keeping `context` unchanged rows next to each change so the diff stays readable on
+  // large, mostly-identical inputs. Pure: returns a NEW array whose items are either an
+  // original row or { type:"fold", count, key, hidden:[rows] }. Runs shorter than
+  // `minFold` are left expanded (folding them would only add clutter). Only "equal"
+  // rows fold; "minor" rows (and all real changes) are always kept visible.
+  function foldRows(rows, context, minFold) {
+    context = context == null ? 3 : Math.max(0, context | 0);
+    minFold = minFold == null ? 10 : Math.max(1, minFold | 0);
+    const n = rows.length;
+    const keep = new Array(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      if (rows[i].type !== "equal") {
+        keep[i] = true;
+        for (let d = 1; d <= context; d++) {
+          if (i - d >= 0) keep[i - d] = true;
+          if (i + d < n) keep[i + d] = true;
+        }
+      }
+    }
+    const out = [];
+    let i = 0;
+    while (i < n) {
+      if (keep[i]) { out.push(rows[i]); i++; continue; }
+      let j = i;
+      while (j < n && !keep[j]) j++;
+      const run = rows.slice(i, j);
+      if (run.length >= minFold) {
+        const f = run[0];
+        out.push({ type: "fold", count: run.length, hidden: run,
+          key: "f" + (f.aNum || 0) + "_" + (f.bNum || 0) + "_" + run.length });
+      } else {
+        for (const r of run) out.push(r);
+      }
+      i = j;
+    }
+    return out;
+  }
+
+  root.ClearDiff = { compare, diffWords, toUnifiedDiff, toMarkdown, foldRows };
 })(typeof window !== "undefined" ? window : globalThis);

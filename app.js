@@ -5,11 +5,18 @@
   const ta = $("text-a"), tb = $("text-b");
   const optWs = $("opt-ws"), optCase = $("opt-case"), optWrap = $("opt-wrap");
   const optBlank = $("opt-blank"), optChar = $("opt-char"), optWsShow = $("opt-ws-show");
+  const optFold = $("opt-fold");
   const result = $("result"), stats = $("stats");
   const navPrev = $("nav-prev"), navNext = $("nav-next"), navCount = $("nav-count");
   let view = "unified";
   let showWs = false;
+  let fold = false;
   let hunks = [], hunkIdx = -1;
+  // Which collapsed bands the user has manually expanded; keyed by stable fold key.
+  // Cleared whenever the compared text changes (keys would no longer match).
+  const FOLD_CONTEXT = 3;
+  let expandedFolds = new Set();
+  let lastA = null, lastB = null;
 
   const hasChrome = typeof chrome !== "undefined" && chrome.storage && chrome.storage.local;
 
@@ -50,9 +57,15 @@
   // Single-column rows shared by Unified and Inline — the ONLY difference is how a
   // CHANGE renders: Unified shows two rows (− old / + new); Inline shows one row with
   // the original text and the edits marked in place (strike-through + insert).
+  // A collapsed band of unchanged lines — full-width, click to expand.
+  function foldRowHtml(r) {
+    return '<div class="row fold"><button class="foldbtn" type="button" data-fold="' + esc(r.key) +
+      '" title="Show the hidden lines">⋯ ' + r.count + " unchanged lines · expand ⋯</button></div>";
+  }
   function renderColumn(out, inlineChange) {
     const html = []; let prevImp = false;
     for (const r of out.rows) {
+      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; continue; }
       const imp = r.type === "del" || r.type === "add" || r.type === "change";
       const hs = imp && !prevImp ? " hstart" : "";
       if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
@@ -79,6 +92,7 @@
   function renderSplit(out) {
     const html = []; let prevImp = false;
     for (const r of out.rows) {
+      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; continue; }
       const imp = r.type === "del" || r.type === "add" || r.type === "change";
       const hs = imp && !prevImp ? " hstart" : "";
       let left, right;
@@ -113,6 +127,8 @@
   }
   function renderDiff() {
     const a = ta.value, b = tb.value;
+    // New text invalidates any manual expand state (fold keys won't match).
+    if (a !== lastA || b !== lastB) { expandedFolds.clear(); lastA = a; lastB = b; }
     if (a === "" && b === "") {
       result.innerHTML = '<div class="empty">Type or paste text in both boxes to compare.</div>';
       stats.textContent = "Type or paste text in both boxes to compare.";
@@ -124,7 +140,15 @@
       const why = (optWs.checked || optCase.checked || optBlank.checked) ? " (with the chosen ignore options)" : "";
       result.innerHTML = '<div class="empty">✓ The two texts are identical' + why + ".</div>";
     } else {
-      result.innerHTML = view === "split" ? renderSplit(out) : view === "inline" ? renderInline(out) : renderUnified(out);
+      let toRender = out;
+      if (fold) {
+        let folded = window.ClearDiff.foldRows(out.rows, FOLD_CONTEXT);
+        if (expandedFolds.size) {
+          folded = folded.flatMap((it) => (it.type === "fold" && expandedFolds.has(it.key) ? it.hidden : [it]));
+        }
+        toRender = { rows: folded };
+      }
+      result.innerHTML = view === "split" ? renderSplit(toRender) : view === "inline" ? renderInline(toRender) : renderUnified(toRender);
     }
     const minorTxt = out.stats.minor ? ' · <span class="minorc">≈' + out.stats.minor + " minor</span>" : "";
     const head = out.stats.onlyMinor ? '<span class="same">No important differences</span> · ' : "";
@@ -219,6 +243,14 @@
   [optWs, optCase, optBlank, optChar].forEach((el) => el.addEventListener("change", () => { render(); persistOpts(); }));
   optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); persistOpts(); });
   if (optWsShow) optWsShow.addEventListener("change", () => { showWs = optWsShow.checked; render(); persistOpts(); });
+  if (optFold) optFold.addEventListener("change", () => { fold = optFold.checked; render(); persistOpts(); });
+  // Expand a collapsed band when its placeholder is clicked.
+  result.addEventListener("click", (e) => {
+    const b = e.target.closest(".foldbtn");
+    if (!b) return;
+    expandedFolds.add(b.dataset.fold);
+    render();
+  });
   $("swap").addEventListener("click", () => {
     const tmp = ta.value; ta.value = tb.value; tb.value = tmp; render(); persist();
   });
@@ -329,12 +361,13 @@
       ignoreWhitespace: optWs.checked, ignoreCase: optCase.checked,
       ignoreBlankLines: optBlank.checked, charLevel: optChar.checked,
       showWhitespace: showWs, wordWrap: optWrap.checked, view: view,
+      foldUnchanged: fold,
     });
   }
   function boot() {
     if (!hasChrome) { render(); return; }
     chrome.storage.local.get(
-      ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view"],
+      ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view", "foldUnchanged"],
       (s) => {
         if (typeof s.textA === "string") ta.value = s.textA;
         if (typeof s.textB === "string") tb.value = s.textB;
@@ -343,6 +376,7 @@
         if (typeof s.ignoreBlankLines === "boolean") optBlank.checked = s.ignoreBlankLines;
         if (typeof s.charLevel === "boolean") optChar.checked = s.charLevel;
         if (typeof s.showWhitespace === "boolean" && optWsShow) { optWsShow.checked = s.showWhitespace; showWs = s.showWhitespace; }
+        if (typeof s.foldUnchanged === "boolean" && optFold) { optFold.checked = s.foldUnchanged; fold = s.foldUnchanged; }
         if (typeof s.wordWrap === "boolean") optWrap.checked = s.wordWrap;
         if (s.view === "split" || s.view === "unified" || s.view === "inline") view = s.view;
         result.classList.toggle("wrap", optWrap.checked);
