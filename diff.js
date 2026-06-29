@@ -208,5 +208,82 @@
     return { rows, stats: { added, removed, minor, identical, onlyMinor, aLines: rawA, bLines: rawB } };
   }
 
-  root.ClearDiff = { compare, diffWords };
+  // --- export helpers (pure, unit-testable) ------------------------------------
+  // Build a standard unified diff (git-style) from two texts. Reuses compare() so
+  // the same ignore options apply. `context` controls surrounding context lines.
+  // Returns "" when the inputs are identical (under the chosen options).
+  function toUnifiedDiff(textA, textB, options, fmtOpts) {
+    fmtOpts = fmtOpts || {};
+    const context = fmtOpts.context == null ? 3 : Math.max(0, fmtOpts.context | 0);
+    const aLabel = fmtOpts.aLabel || "Original";
+    const bLabel = fmtOpts.bLabel || "Changed";
+    const out = compare(textA, textB, options);
+    if (out.stats.identical) return "";
+
+    // Flatten display rows into tagged single lines: ' ' (context), '-' (del), '+' (add).
+    const joinW = (ws) => ws.map((w) => w.text).join("");
+    const entries = [];
+    for (const r of out.rows) {
+      if (r.type === "equal") entries.push({ tag: " ", text: r.text });
+      else if (r.type === "del") entries.push({ tag: "-", text: r.text });
+      else if (r.type === "add") entries.push({ tag: "+", text: r.text });
+      else if (r.type === "change") {
+        entries.push({ tag: "-", text: joinW(r.aWords) });
+        entries.push({ tag: "+", text: joinW(r.bWords) });
+      } else if (r.type === "minor") {
+        // Matched only under an ignore option but raw text differs — show the raw change.
+        entries.push({ tag: "-", text: r.aText });
+        entries.push({ tag: "+", text: r.bText });
+      }
+    }
+
+    // Assign 1-based source line numbers as we walk: ' ' advances both, '-' a-only,
+    // '+' b-only.
+    let an = 0, bn = 0;
+    for (const e of entries) {
+      if (e.tag !== "+") e.a = ++an; else e.a = null;
+      if (e.tag !== "-") e.b = ++bn; else e.b = null;
+    }
+
+    // Group changed lines into hunks, padding each side with `context` lines and
+    // merging groups whose contexts touch.
+    const changed = [];
+    for (let i = 0; i < entries.length; i++) if (entries[i].tag !== " ") changed.push(i);
+    if (!changed.length) return "";
+    const groups = [];
+    let gs = Math.max(0, changed[0] - context);
+    let ge = Math.min(entries.length - 1, changed[0] + context);
+    for (let k = 1; k < changed.length; k++) {
+      const idx = changed[k];
+      if (idx - context <= ge + 1) ge = Math.min(entries.length - 1, idx + context);
+      else { groups.push([gs, ge]); gs = Math.max(0, idx - context); ge = Math.min(entries.length - 1, idx + context); }
+    }
+    groups.push([gs, ge]);
+
+    const lines = ["--- a/" + aLabel, "+++ b/" + bLabel];
+    for (const [s, e] of groups) {
+      let aLen = 0, bLen = 0, aStart = 0, bStart = 0;
+      for (let i = s; i <= e; i++) {
+        const en = entries[i];
+        if (en.tag !== "+") { aLen++; if (!aStart) aStart = en.a; }
+        if (en.tag !== "-") { bLen++; if (!bStart) bStart = en.b; }
+      }
+      // Pure-addition / pure-deletion hunks: start is the preceding line (count before group).
+      if (aLen === 0) aStart = entries.slice(0, s).filter((x) => x.tag !== "+").length;
+      if (bLen === 0) bStart = entries.slice(0, s).filter((x) => x.tag !== "-").length;
+      lines.push("@@ -" + aStart + "," + aLen + " +" + bStart + "," + bLen + " @@");
+      for (let i = s; i <= e; i++) lines.push(entries[i].tag + entries[i].text);
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  // Markdown export: a fenced ```diff block so it renders with red/green on GitHub
+  // and other Markdown viewers.
+  function toMarkdown(textA, textB, options, fmtOpts) {
+    const ud = toUnifiedDiff(textA, textB, options, fmtOpts);
+    if (!ud) return "";
+    return "```diff\n" + ud + "```\n";
+  }
+
+  root.ClearDiff = { compare, diffWords, toUnifiedDiff, toMarkdown };
 })(typeof window !== "undefined" ? window : globalThis);

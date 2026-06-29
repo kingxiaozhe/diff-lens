@@ -31,6 +31,7 @@ FEATURES
 • Compare local files — drag a file in or "open file…"; read locally, never uploaded.
 • Right-click "set as Text A/B" to capture selected text from any page (even across two tabs).
 • Format JSON — sort keys & pretty-print both sides for a structural compare that ignores key order and formatting noise.
+• Export the diff — copy as text, copy/download a standard unified diff (.patch, git-apply-ready), or copy as Markdown for GitHub.
 
 PRIVACY
 No accounts, no tracking, no data leaves your device. Settings and text are stored locally only.

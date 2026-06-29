@@ -27,6 +27,9 @@ default and changes are highlighted down to the word.
 - **Show whitespace** — reveal spaces (·), tabs (→) and trailing whitespace.
 - **Unimportant differences** — when you ignore whitespace/case, those diffs are
   dimmed (still visible), not silently dropped (Beyond Compare's 3-state model).
+- **Export the diff** — copy as plain text, copy/download a standard **unified diff
+  (`.patch`, `git apply`-ready), or copy as **Markdown** (a fenced ```` ```diff ````
+  block that renders red/green on GitHub).
 - Ignore whitespace / ignore blank lines / ignore case; word-wrap; swap A↔B; copy result.
 - Real source line numbers, preserved even when blank lines are ignored.
 - Panes, view, and options persist between opens.
@@ -41,8 +44,7 @@ default and changes are highlighted down to the word.
 
 ## Develop / test
 
-- Engine unit tests: `node src/clear-diff-test.mjs`
-- End-to-end smoke (Chrome for Testing): `node src/clear-diff-smoke.mjs`
+- Engine + export unit tests (no deps): `node tests/diff-test.mjs`
 
 See `docs/ARCHITECTURE.md` for design decisions and known limitations.
 

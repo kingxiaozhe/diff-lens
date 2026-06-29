@@ -27,7 +27,7 @@
   <section class="inputs">
     <div class="pane">
       <div class="pane-head"><span>Original (A)</span><span class="pane-actions"><button class="link" data-file="a">open file…</button><button class="link" data-clear="a">clear</button></span></div>
-      <textarea id="text-a" spellcheck="false" placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
+      <textarea id="text-a" spellcheck="false" aria-label="Original text (A)" placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
       <input type="file" id="file-a" class="file-input" hidden />
     </div>
     <div class="midcol">
@@ -35,14 +35,14 @@
     </div>
     <div class="pane">
       <div class="pane-head"><span>Changed (B)</span><span class="pane-actions"><button class="link" data-file="b">open file…</button><button class="link" data-clear="b">clear</button></span></div>
-      <textarea id="text-b" spellcheck="false" placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
+      <textarea id="text-b" spellcheck="false" aria-label="Changed text (B)" placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
       <input type="file" id="file-b" class="file-input" hidden />
     </div>
   </section>
 
   <section class="resultwrap">
     <div class="result-head">
-      <span id="stats" class="stats">Type or paste text in both boxes to compare.</span>
+      <span id="stats" class="stats" title="Click the added / removed counts to jump to the first difference">Type or paste text in both boxes to compare.</span>
       <div class="head-right">
         <div class="navgrp" role="group" aria-label="Jump between differences">
           <button id="nav-prev" class="nav-btn" title="Previous difference (Alt+↑)" disabled>↑</button>
@@ -54,10 +54,18 @@
           <button id="view-split" class="seg-btn" data-view="split">Split</button>
           <button id="view-inline" class="seg-btn" data-view="inline" title="Original text with changes marked inline">Inline</button>
         </div>
-        <button id="copy" class="link" title="Copy the diff as text">Copy result</button>
+        <details id="export" class="export">
+          <summary class="link" title="Export the diff" aria-haspopup="menu">Export ▾</summary>
+          <div class="export-menu" role="menu">
+            <button id="copy" class="export-item" role="menuitem">Copy result (text)</button>
+            <button id="copy-diff" class="export-item" role="menuitem">Copy unified diff</button>
+            <button id="copy-md" class="export-item" role="menuitem">Copy as Markdown</button>
+            <button id="dl-patch" class="export-item" role="menuitem">Download .patch</button>
+          </div>
+        </details>
       </div>
     </div>
-    <div id="result" class="result wrap" aria-live="polite"></div>
+    <div id="result" class="result wrap" role="region" aria-label="Comparison result" aria-live="polite"></div>
   </section>
 
   <script src="diff.js"></script>

@@ -158,22 +158,58 @@
     updateNav();
   }
 
-  function copyResult() {
-    const a = ta.value, b = tb.value;
-    if (a === "" && b === "") return;
-    const out = window.ClearDiff.compare(a, b, opts());
-    const lines = out.rows.map((r) => {
+  // Plain-text diff (the legacy "Copy result" format).
+  function plainDiffText() {
+    const out = window.ClearDiff.compare(ta.value, tb.value, opts());
+    return out.rows.map((r) => {
       if (r.type === "equal") return "  " + r.text;
       if (r.type === "minor") return "~ " + r.bText;
       if (r.type === "del") return "- " + r.text;
       if (r.type === "add") return "+ " + r.text;
       if (r.type === "change") return "- " + r.aWords.map((w) => w.text).join("") + "\n+ " + r.bWords.map((w) => w.text).join("");
       return "";
-    });
-    navigator.clipboard.writeText(lines.join("\n")).then(() => {
-      const btn = $("copy"); const old = btn.textContent;
-      btn.textContent = "Copied ✓"; setTimeout(() => (btn.textContent = old), 1200);
-    }).catch(() => {});
+    }).join("\n");
+  }
+
+  function flashBtn(btn, label) {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = label; setTimeout(() => (btn.textContent = old), 1200);
+  }
+  function closeExport() { const d = $("export"); if (d) d.open = false; }
+
+  function copyText(text, btn, okLabel) {
+    if (!text) return;
+    navigator.clipboard.writeText(text)
+      .then(() => flashBtn(btn, okLabel || "Copied ✓"))
+      .catch(() => flashBtn(btn, "Copy failed"));
+  }
+  function copyResult() {
+    if (ta.value === "" && tb.value === "") return;
+    copyText(plainDiffText(), $("copy"));
+    closeExport();
+  }
+  function copyUnified() {
+    const ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
+    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
+    copyText(ud, $("copy-diff")); closeExport();
+  }
+  function copyMarkdown() {
+    const md = window.ClearDiff.toMarkdown(ta.value, tb.value, opts());
+    if (!md) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
+    copyText(md, $("copy-md")); closeExport();
+  }
+  // Download the unified diff as a .patch file — a local Blob, no network.
+  function downloadPatch() {
+    const ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
+    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
+    const blob = new Blob([ud], { type: "text/x-patch" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "difflens.patch";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flashBtn($("dl-patch"), "Saved ✓"); closeExport();
   }
 
   let t;
@@ -187,9 +223,25 @@
     const tmp = ta.value; ta.value = tb.value; tb.value = tmp; render(); persist();
   });
   $("copy").addEventListener("click", copyResult);
+  { const e = $("copy-diff"); if (e) e.addEventListener("click", copyUnified); }
+  { const e = $("copy-md"); if (e) e.addEventListener("click", copyMarkdown); }
+  { const e = $("dl-patch"); if (e) e.addEventListener("click", downloadPatch); }
+  // Clickable stats: clicking the +added / −removed / ≈minor counts jumps to the
+  // first difference so the numbers double as navigation.
+  stats.addEventListener("click", (e) => {
+    if (!e.target.closest(".add, .del, .minorc")) return;
+    if (!hunks.length) return;
+    hunkIdx = -1; jump(1);
+  });
+  // Close the export menu on an outside click or Escape.
+  document.addEventListener("click", (e) => {
+    const d = $("export");
+    if (d && d.open && !d.contains(e.target)) d.open = false;
+  });
   if (navPrev) navPrev.addEventListener("click", () => jump(-1));
   if (navNext) navNext.addEventListener("click", () => jump(1));
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { const d = $("export"); if (d && d.open) { d.open = false; return; } }
     if (!e.altKey) return;
     if (e.key === "ArrowDown") { e.preventDefault(); jump(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); jump(-1); }
