@@ -258,11 +258,21 @@
     const bLabel = fmtOpts.bLabel || "Changed";
     const out = compare(textA, textB, options);
     if (out.stats.identical) return "";
+    // A unified diff must APPLY to the raw files. ignoreBlankLines filters lines out
+    // of the compare stream entirely, which breaks the sequential renumbering below
+    // (it assumes every source line appears exactly once) — hunk headers drift and
+    // blank context lines vanish, so `git apply` rejects the patch. Keep the
+    // "identical?" judgment on the user's options (UI semantics unchanged), but build
+    // the patch body from an unfiltered compare: blank-line differences ride along as
+    // real -/+ lines, which is the price of a patch that actually applies.
+    const body = options && options.ignoreBlankLines
+      ? compare(textA, textB, Object.assign({}, options, { ignoreBlankLines: false }))
+      : out;
 
     // Flatten display rows into tagged single lines: ' ' (context), '-' (del), '+' (add).
     const joinW = (ws) => ws.map((w) => w.text).join("");
     const entries = [];
-    for (const r of out.rows) {
+    for (const r of body.rows) {
       if (r.type === "equal") entries.push({ tag: " ", text: r.text });
       else if (r.type === "del") entries.push({ tag: "-", text: r.text });
       else if (r.type === "add") entries.push({ tag: "+", text: r.text });
