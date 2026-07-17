@@ -13,6 +13,10 @@ default and changes are highlighted down to the word.
 
 - **Click the toolbar icon → opens a full browser tab** (no cramped popup that
   vanishes when you click away). Re-clicking focuses the tab it already opened.
+- **A workbench layout** — a slim utility bar, the two input panes, a dedicated
+  options row, the diff at full width, and a status bar carrying the counts and
+  difference-navigation. Every compare option stays visible at once; nothing is
+  buried in a menu.
 - Two-pane compare with a live diff — **unified**, **side-by-side (split)**, or
   **inline** view (one merged column: the original text with edits marked in place).
 - **Word- or character-level highlighting** inside changed lines (toggle).
@@ -45,10 +49,20 @@ default and changes are highlighted down to the word.
 - Panes, view, and options persist between opens.
 - Light & dark, follows your system theme.
 
+## Package it for the store
+
+`node package.mjs` → `difflens-<version>-upload.zip` (11 files, ~29 KB).
+
+The zip is **derived, not curated**: it starts at `manifest.json` and takes the
+closure of every local file it and `compare.html` reference. Wire a new script
+into the page and it ships; leave a note in `icons/` and it doesn't, because
+nothing points at it. Zipping the folder by hand would ship ~3 MB of design
+drafts, specs, screenshots and tests — none of which the extension runs.
+
 ## Load it locally (for testing)
 
 1. `chrome://extensions` → enable **Developer mode**.
-2. **Load unpacked** → select this `clear-diff/` folder.
+2. **Load unpacked** → select this folder.
 3. Click the toolbar icon to open the compare tab. To pull text off a page,
    right-click a selection → "set as Text A/B" (an open tab updates live).
 
@@ -57,6 +71,11 @@ default and changes are highlighted down to the word.
 - Engine + export unit tests (no deps): `node tests/diff-test.mjs`
 - History helper unit tests (no deps): `node tests/history-test.mjs`
 - End-to-end UI smoke (headless Chromium via Playwright): `node tests/smoke.mjs`
+  — drives the real UI and enforces the privacy invariant: the manifest must grant
+  exactly `storage` + `contextMenus`, and no source file may reach the network.
+  Needs Playwright (`npm i -g playwright && npx playwright install chromium`);
+  without it the script exits 2 rather than failing. The two unit suites stay
+  dependency-free and must pass regardless.
 
 See `docs/ARCHITECTURE.md` for design decisions and known limitations.
 

@@ -6,75 +6,111 @@
   <link rel="stylesheet" href="app.css" />
   <title>DiffLens — Compare Text</title>
 </head>
-<body class="page">
-  <header class="bar">
+<body>
+<div class="app">
+  <header class="topbar">
     <div class="brand">
-      <span class="logo">≠</span>
-      <span class="name">DiffLens</span>
-      <span class="badge" title="Everything runs locally in your browser. Nothing is uploaded.">🔒 100% local · no upload, no account, no ads</span>
+      <span class="mark" aria-hidden="true">≠</span>
+      <span class="wordmark">DiffLens</span>
+      <span class="privacy" title="Everything runs in this tab. Nothing is uploaded.">
+        <b>🔒 100% local</b>
+        <span>no upload · no account · no ads</span>
+      </span>
     </div>
-    <div class="tools">
-      <button id="fmt-json" class="toolbtn" title="Parse, sort keys & pretty-print both sides — a structural JSON compare (ignores key order & formatting)">{ } Format JSON</button>
-      <label class="chk"><input type="checkbox" id="opt-ws" /> Ignore whitespace</label>
-      <label class="chk"><input type="checkbox" id="opt-blank" /> Ignore blank lines</label>
-      <label class="chk"><input type="checkbox" id="opt-case" /> Ignore case</label>
-      <label class="chk"><input type="checkbox" id="opt-char" /> Char level</label>
+    <div class="topacts">
+      <details class="menu" id="history">
+        <summary aria-haspopup="menu" title="Saved comparisons (local only)">History ▾</summary>
+        <div class="sheet histsheet" role="menu">
+          <button class="item" id="hist-save" role="menuitem">＋ Save current comparison</button>
+          <div class="hist-list" id="hist-list"></div>
+        </div>
+      </details>
+      <details class="menu" id="export">
+        <summary aria-haspopup="menu" title="Export the diff">Export ▾</summary>
+        <div class="sheet" role="menu">
+          <button class="item" id="copy" role="menuitem">Copy result (text)</button>
+          <button class="item" id="copy-diff" role="menuitem">Copy unified diff</button>
+          <button class="item" id="copy-md" role="menuitem">Copy as Markdown</button>
+          <button class="item" id="dl-patch" role="menuitem">Download .patch</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <section class="io">
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Original (A)</h2>
+          <span class="pane-acts">
+            <button class="link" data-file="a">open file…</button>
+            <button class="link" data-clear="a">clear</button>
+          </span>
+        </div>
+        <textarea id="text-a" spellcheck="false" aria-label="Original text (A)"
+          placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
+        <input type="file" id="file-a" hidden />
+      </div>
+
+      <div class="seam">
+        <button class="swap" id="swap" title="Swap A and B" aria-label="Swap A and B">⇄</button>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Changed (B)</h2>
+          <span class="pane-acts">
+            <button class="link" data-file="b">open file…</button>
+            <button class="link" data-clear="b">clear</button>
+          </span>
+        </div>
+        <textarea id="text-b" spellcheck="false" aria-label="Changed text (B)"
+          placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
+        <input type="file" id="file-b" hidden />
+      </div>
+    </section>
+
+  <section class="optbar">
+    <!-- The group heading is what makes "Whitespace" mean *ignore* whitespace, so
+         it has to reach the accessibility tree too — otherwise this toggle and
+         "Show whitespace" below read as near-identical names doing opposite things. -->
+    <div class="group" role="group" aria-labelledby="g-ignore">
+      <span class="glabel" id="g-ignore">Ignore</span>
+      <label class="chk"><input type="checkbox" id="opt-ws" aria-label="Ignore whitespace" /> Whitespace</label>
+      <label class="chk"><input type="checkbox" id="opt-blank" aria-label="Ignore blank lines" /> Blank lines</label>
+      <label class="chk"><input type="checkbox" id="opt-case" aria-label="Ignore case" /> Case</label>
+    </div>
+    <div class="group" role="group" aria-labelledby="g-precision">
+      <span class="glabel" id="g-precision">Precision</span>
+      <label class="chk"><input type="checkbox" id="opt-char" /> Character level</label>
+      <button class="action" id="fmt-json" title="Parse, sort keys &amp; pretty-print both sides — a structural JSON compare that ignores key order &amp; formatting">{ }&nbsp;&nbsp;Format JSON</button>
+    </div>
+    <div class="group" role="group" aria-labelledby="g-display">
+      <span class="glabel" id="g-display">Display</span>
       <label class="chk"><input type="checkbox" id="opt-ws-show" /> Show whitespace</label>
       <label class="chk" title="Collapse long runs of unchanged lines (large files); click a band to expand"><input type="checkbox" id="opt-fold" /> Collapse unchanged</label>
       <label class="chk"><input type="checkbox" id="opt-wrap" checked /> Word wrap</label>
     </div>
-  </header>
-
-  <section class="inputs">
-    <div class="pane">
-      <div class="pane-head"><span>Original (A)</span><span class="pane-actions"><button class="link" data-file="a">open file…</button><button class="link" data-clear="a">clear</button></span></div>
-      <textarea id="text-a" spellcheck="false" aria-label="Original text (A)" placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
-      <input type="file" id="file-a" class="file-input" hidden />
-    </div>
-    <div class="midcol">
-      <button id="swap" class="icon-btn" title="Swap A and B">⇄</button>
-    </div>
-    <div class="pane">
-      <div class="pane-head"><span>Changed (B)</span><span class="pane-actions"><button class="link" data-file="b">open file…</button><button class="link" data-clear="b">clear</button></span></div>
-      <textarea id="text-b" spellcheck="false" aria-label="Changed text (B)" placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
-      <input type="file" id="file-b" class="file-input" hidden />
+    <div class="seg" role="group" aria-label="View">
+      <button class="segbtn on" data-view="unified">Unified</button>
+      <button class="segbtn" data-view="split">Split</button>
+      <button class="segbtn" data-view="inline" title="Original text with changes marked inline">Inline</button>
     </div>
   </section>
 
-  <section class="resultwrap">
-    <div class="result-head">
-      <span id="stats" class="stats" title="Click the added / removed counts to jump to the first difference">Type or paste text in both boxes to compare.</span>
-      <div class="head-right">
-        <div class="navgrp" role="group" aria-label="Jump between differences">
-          <button id="nav-prev" class="nav-btn" title="Previous difference (Alt+↑)" disabled>↑</button>
-          <span id="nav-count" class="nav-count">—</span>
-          <button id="nav-next" class="nav-btn" title="Next difference (Alt+↓)" disabled>↓</button>
-        </div>
-        <div class="seg" role="group" aria-label="View">
-          <button id="view-unified" class="seg-btn on" data-view="unified">Unified</button>
-          <button id="view-split" class="seg-btn" data-view="split">Split</button>
-          <button id="view-inline" class="seg-btn" data-view="inline" title="Original text with changes marked inline">Inline</button>
-        </div>
-        <details id="history" class="export">
-          <summary class="link" title="Saved comparisons (local only)" aria-haspopup="menu">History ▾</summary>
-          <div class="export-menu hist-menu" role="menu">
-            <button id="hist-save" class="export-item" role="menuitem">＋ Save current comparison</button>
-            <div id="hist-list" class="hist-list"></div>
-          </div>
-        </details>
-        <details id="export" class="export">
-          <summary class="link" title="Export the diff" aria-haspopup="menu">Export ▾</summary>
-          <div class="export-menu" role="menu">
-            <button id="copy" class="export-item" role="menuitem">Copy result (text)</button>
-            <button id="copy-diff" class="export-item" role="menuitem">Copy unified diff</button>
-            <button id="copy-md" class="export-item" role="menuitem">Copy as Markdown</button>
-            <button id="dl-patch" class="export-item" role="menuitem">Download .patch</button>
-          </div>
-        </details>
-      </div>
-    </div>
+  <section class="stage">
     <div id="result" class="result wrap" role="region" aria-label="Comparison result" aria-live="polite"></div>
   </section>
+
+  <footer class="statusbar">
+    <span id="stats" class="stats" title="Click the added / removed counts to jump to the first difference">Type or paste text in both boxes to compare.</span>
+    <div class="nav" role="group" aria-label="Jump between differences">
+      <span class="hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd></span>
+      <button id="nav-prev" class="navbtn" title="Previous difference (Alt+↑)" disabled>↑</button>
+      <span id="nav-count" class="navcount">—</span>
+      <button id="nav-next" class="navbtn" title="Next difference (Alt+↓)" disabled>↓</button>
+    </div>
+  </footer>
+</div>
 
   <script src="diff.js"></script>
   <script src="history.js"></script>

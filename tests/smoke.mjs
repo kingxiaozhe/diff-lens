@@ -4,13 +4,19 @@
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
-// Playwright may be a local dep or globally installed; try both.
+// Playwright may be a local dep or globally installed. Node doesn't resolve global
+// packages, so ask npm where they live rather than hard-coding a machine path.
 function loadPlaywright() {
-  const candidates = ["playwright", "/opt/node22/lib/node_modules/playwright"];
+  const candidates = ["playwright"];
+  try { candidates.push(join(execSync("npm root -g", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(), "playwright")); } catch { /* npm missing */ }
+  candidates.push("/opt/node22/lib/node_modules/playwright");
   for (const c of candidates) { try { return require(c); } catch { /* try next */ } }
-  console.error("Playwright not found — install it or run unit tests with: node tests/diff-test.mjs");
+  console.error("Playwright not found — install it (npm i -g playwright && npx playwright install chromium)");
+  console.error("or run the dependency-free unit tests: node tests/diff-test.mjs");
   process.exit(2);
 }
 const { chromium } = loadPlaywright();
@@ -20,6 +26,44 @@ const pageUrl = pathToFileURL(join(here, "..", "compare.html")).href;
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.error("✗ " + m); } };
+
+// ── Privacy regression guard ────────────────────────────────────────────────
+// The manifest IS the privacy story: no host_permissions and no network means no
+// code path can exfiltrate text. README, STORE_LISTING and the privacy policy all
+// promise this, and a promise no test enforces is one a refactor can quietly break.
+//
+// This runs FIRST, before a browser is even launched, and depends on nothing else.
+// It used to sit at the bottom: any throw upstream — a 30s timeout in the storage
+// block was enough — and the whole thing never executed, while the run still exited
+// non-zero and looked like an ordinary failure. The most important assertion in the
+// suite must not be the easiest one to skip.
+{
+  const manifest = JSON.parse(readFileSync(join(here, "..", "manifest.json"), "utf8"));
+  const perms = [...(manifest.permissions || [])].sort();
+  ok(JSON.stringify(perms) === JSON.stringify(["contextMenus", "storage"]),
+    "manifest grants exactly storage + contextMenus (got: " + JSON.stringify(perms) + ")");
+
+  // Every route out of the sandbox, not just the obvious one. A relaxed
+  // connect-src would undo the whole promise as surely as a host permission.
+  for (const field of ["host_permissions", "optional_permissions", "optional_host_permissions",
+                       "content_scripts", "externally_connectable", "declarative_net_request",
+                       "web_accessible_resources", "sandbox"]) {
+    ok(!(field in manifest), "manifest declares no " + field);
+  }
+  const csp = JSON.stringify(manifest.content_security_policy || {});
+  ok(!/https?:|\*/.test(csp), "manifest CSP opens no external origin (got: " + csp + ")");
+
+  // Source files may not reach the network. Strip comments properly first: filtering
+  // whole lines let `/* note */ var u = "https://evil.example"` through, and treated
+  // a CSS `* { ... }` rule as a comment.
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[ \t])\/\/.*$/gm, "$1");
+  // Protocol-relative only where a URL can actually sit — after a quote or `url(`.
+  // A bare /\/\// matches every trailing comment in the file.
+  const NET = /https?:\/\/|@import|["'(]\s*\/\/[a-z0-9-]/i;
+  for (const f of ["compare.html", "app.css", "app.js", "diff.js", "history.js", "background.js"]) {
+    ok(!NET.test(strip(readFileSync(join(here, "..", f), "utf8"))), f + " contains no external URL");
+  }
+}
 
 const browser = await chromium.launch();
 try {
@@ -123,9 +167,181 @@ try {
   });
   ok(synced, "scrolling input A scrolls input B to match");
 
+  // The three placeholder states must be styled, not bare text. A regex on
+  // textContent passes either way, so assert the box actually renders.
+  await page.fill("#text-a", "");
+  await page.fill("#text-b", "");
+  await page.waitForSelector("#result .placeholder");
+  const emptyBox = await page.evaluate(() => {
+    const el = document.querySelector("#result .placeholder");
+    const cs = getComputedStyle(el);
+    return { h: el.getBoundingClientRect().height, place: cs.placeItems, big: !!el.querySelector(".big") };
+  });
+  ok(emptyBox.h >= 180, "empty state is a styled box, not bare text (height " + Math.round(emptyBox.h) + "px)");
+  ok(emptyBox.big, "empty state has a .big headline");
+  ok(emptyBox.place.includes("center"), "empty state is centred, not parked top-left (place-items: " + emptyBox.place + ")");
+  await page.fill("#text-a", "same");
+  await page.fill("#text-b", "same");
+  await page.waitForSelector("#result .placeholder");
+  ok((await page.locator("#result .placeholder").count()) === 1, "identical state reuses the styled placeholder");
+
+  // History caps at 12 entries; the menu must scroll rather than grow past the
+  // viewport, or the oldest entries become unreachable.
+  await page.click("#history summary");
+  for (let i = 0; i < 14; i++) {
+    // Set values without clicking: a click in the panes would trip the
+    // outside-click handler and close the menu we're measuring.
+    await page.evaluate((n) => {
+      document.getElementById("text-a").value = "entry " + n;
+      document.getElementById("text-b").value = "changed " + n;
+    }, i);
+    await page.click("#hist-save");
+  }
+  const hist = await page.evaluate(() => {
+    const box = document.getElementById("hist-list");
+    return {
+      items: box.querySelectorAll(".hist-item").length,
+      scrolls: box.scrollHeight > box.clientHeight,
+      bottom: box.getBoundingClientRect().bottom,
+      vh: window.innerHeight,
+    };
+  });
+  ok(hist.items === 12, "history caps at 12 entries (got " + hist.items + ")");
+  ok(hist.scrolls, "history list scrolls instead of growing unbounded");
+  ok(hist.bottom <= hist.vh, "history menu stays inside the viewport");
+  await page.click("#history summary");
+
   ok(errors.length === 0, "no uncaught page errors" + (errors.length ? ": " + errors.join("; ") : ""));
 } finally {
   await browser.close();
+}
+
+// ── chrome.storage round-trip ───────────────────────────────────────────────
+// compare.html is opened over file://, where `chrome` is undefined and boot()
+// returns early — so persist/persistOpts/boot/onChanged never ran under test.
+// Stub the API to cover them: they own "panes and options survive a reopen" and
+// "a right-click capture updates an already-open tab".
+{
+  const page = await (await chromium.launch()).newPage();
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(String(e)));
+  // The store lives in Node, not the page: a reload wipes page globals, and
+  // surviving the reload is exactly what we're testing.
+  const store = {};
+  await page.exposeFunction("__put", (obj) => { Object.assign(store, obj); });
+  await page.exposeFunction("__all", () => store);
+  await page.addInitScript(() => {
+    const listeners = [];
+    window.chrome = {
+      storage: {
+        local: {
+          set: (obj, cb) => {
+            window.__put(obj).then(() => {
+              const ch = {};
+              for (const k in obj) ch[k] = { newValue: obj[k] };
+              listeners.forEach((l) => l(ch, "local"));
+              cb && cb();
+            });
+          },
+          get: (keys, cb) => {
+            window.__all().then((s) => {
+              const out = {};
+              for (const k of keys) if (k in s) out[k] = s[k];
+              cb(out);
+            });
+          },
+        },
+        onChanged: { addListener: (l) => listeners.push(l) },
+      },
+    };
+    window.__fire = (obj) => window.chrome.storage.local.set(obj);
+    // Fire an onChanged for an arbitrary area, so the areaName guard is testable.
+    window.__fireArea = (area, obj) => {
+      const ch = {};
+      for (const k in obj) ch[k] = { newValue: obj[k] };
+      listeners.forEach((l) => l(ch, area));
+    };
+  });
+  await page.goto(pageUrl);
+  await page.waitForSelector("#result");
+
+  // Write through the real UI, then reload and confirm boot() restores it all.
+  // Every toggle, not a sample: boot() restores each one by hand, so each one is
+  // its own chance to have been wired to the wrong id and silently lose a setting.
+  const TOGGLES = ["opt-ws", "opt-blank", "opt-case", "opt-char", "opt-ws-show", "opt-fold"];
+  await page.fill("#text-a", "alpha");
+  await page.fill("#text-b", "beta");
+  for (const t of TOGGLES) await page.check("#" + t);
+  await page.uncheck("#opt-wrap");
+  await page.click('[data-view="split"]');
+  await page.click("#history summary");
+  await page.click("#hist-save");
+  await page.click("#history summary");
+  await page.waitForTimeout(200);
+  const saved = { ...store };
+  await page.reload();
+  await page.waitForSelector("#result");
+  const restored = await page.evaluate((toggles) => ({
+    a: document.getElementById("text-a").value,
+    b: document.getElementById("text-b").value,
+    on: toggles.filter((t) => document.getElementById(t).checked),
+    wrap: document.getElementById("opt-wrap").checked,
+    view: document.querySelector("[data-view].on")?.dataset.view,
+    hist: document.querySelectorAll("#hist-list .hist-item").length,
+  }), TOGGLES);
+  ok(saved.textA === "alpha" && saved.textB === "beta", "panes are written to storage");
+  ok(restored.a === "alpha" && restored.b === "beta", "panes are restored on reopen");
+  ok(restored.on.length === TOGGLES.length,
+    "every toggle is restored on reopen (missing: " + TOGGLES.filter((t) => !restored.on.includes(t)).join(", ") + ")");
+  ok(restored.wrap === false, "an unchecked toggle stays unchecked on reopen");
+  ok(restored.view === "split", "view is restored on reopen");
+  ok(restored.hist === 1, "saved history survives a reopen");
+
+  // A right-click capture elsewhere writes storage; an open tab must follow.
+  const followed = await page.evaluate(async () => {
+    window.__fire({ textA: "captured from a page" });
+    for (let i = 0; i < 50 && document.getElementById("text-a").value !== "captured from a page"; i++)
+      await new Promise((r) => setTimeout(r, 20));
+    return document.getElementById("text-a").value;
+  });
+  ok(followed === "captured from a page", "an external storage write updates the open tab (got: " + JSON.stringify(followed) + ")");
+
+  // Writes to other storage areas are not ours to act on — sync and managed would
+  // otherwise stomp whatever the user has in the panes.
+  const ignored = await page.evaluate(async () => {
+    window.__fireArea("sync", { textA: "from another area" });
+    await new Promise((r) => setTimeout(r, 150));
+    return document.getElementById("text-a").value;
+  });
+  ok(ignored === "captured from a page", "a write to a non-local storage area is ignored (got: " + JSON.stringify(ignored) + ")");
+
+  ok(errs.length === 0, "no page errors under the chrome stub" + (errs.length ? ": " + errs.join("; ") : ""));
+  await page.context().browser().close();
+}
+
+// ── Nothing leaves the tab, observed rather than inferred ───────────────────
+// The grep above is a first pass and no more: `"htt"+"ps://"+host` defeats it, and
+// so does any URL assembled at runtime. Watch what the page actually asks for.
+{
+  const net = await chromium.launch();
+  const page = await net.newPage();
+  const external = [];
+  await page.route("**", (route) => {
+    const url = route.request().url();
+    if (!/^(file|data|blob|about):/.test(url)) external.push(url);
+    route.continue();
+  });
+  await page.goto(pageUrl);
+  await page.waitForSelector("#result");
+  await page.fill("#text-a", "alpha\nbeta");
+  await page.fill("#text-b", "alpha\nGAMMA");
+  await page.waitForFunction(() => document.querySelectorAll("#result .row").length > 0);
+  await page.click('[data-view="split"]');
+  await page.click("#history summary");
+  await page.click("#hist-save");
+  await page.waitForTimeout(200);
+  ok(external.length === 0, "the page requests nothing off-device (saw: " + external.join(", ") + ")");
+  await net.close();
 }
 
 console.log("\n" + pass + " passed, " + fail + " failed");

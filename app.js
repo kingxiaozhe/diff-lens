@@ -52,8 +52,9 @@
     };
   }
 
+  // 两个 span 之间不留字面空格——.num 用 flex gap 控距，字面空格会额外撑开一格。
   function numCell(a, b) {
-    return '<div class="num"><span>' + (a == null ? "" : a) + '</span> <span>' + (b == null ? "" : b) + "</span></div>";
+    return '<div class="num"><span>' + (a == null ? "" : a) + '</span><span>' + (b == null ? "" : b) + "</span></div>";
   }
   function urow(cls, sign, aNum, bNum, inner) {
     return '<div class="row ' + cls + '">' + numCell(aNum, bNum) + '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
@@ -99,17 +100,19 @@
       if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; continue; }
       const imp = r.type === "del" || r.type === "add" || r.type === "change";
       const hs = imp && !prevImp ? " hstart" : "";
+      // 右栏必须带 class "b" —— .scol.b 是两栏之间的分隔竖线。
+      // （此前一直漏加，导致 app.css 的 .scol.b 规则从未生效、split 视图无分栏线。）
       let left, right;
       if (r.type === "equal") {
-        left = scol("equal", r.aNum, fmt(r.text)); right = scol("equal", r.bNum, fmt(r.text));
+        left = scol("equal", r.aNum, fmt(r.text)); right = scol("equal b", r.bNum, fmt(r.text));
       } else if (r.type === "minor") {
-        left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor", r.bNum, renderWords(r.bWords));
+        left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor b", r.bNum, renderWords(r.bWords));
       } else if (r.type === "del") {
-        left = scol("del" + (r.moved ? " moved" : ""), r.aNum, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")); right = scol("blank", null, "");
+        left = scol("del" + (r.moved ? " moved" : ""), r.aNum, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")); right = scol("blank b", null, "");
       } else if (r.type === "add") {
-        left = scol("blank", null, ""); right = scol("add" + (r.moved ? " moved" : ""), r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""));
+        left = scol("blank", null, ""); right = scol("add b" + (r.moved ? " moved" : ""), r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""));
       } else { // change
-        left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg", r.bNum, renderWords(r.bWords));
+        left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg b", r.bNum, renderWords(r.bWords));
       }
       html.push('<div class="srow' + hs + '">' + left + right + "</div>");
       prevImp = imp;
@@ -123,8 +126,8 @@
     try {
       renderDiff();
     } catch (e) {
-      result.innerHTML = '<div class="empty">Couldn’t compare this input' +
-        (e && e.message ? " (" + esc(String(e.message)) + ")" : "") + ". Try smaller or simpler text.</div>";
+      result.innerHTML = '<div class="placeholder"><span class="big">Couldn’t compare this input' +
+        (e && e.message ? " (" + esc(String(e.message)) + ")" : "") + '.</span><span>Try smaller or simpler text.</span></div>';
       stats.textContent = "Comparison error";
       hunks = []; hunkIdx = -1; updateNav();
     }
@@ -134,7 +137,8 @@
     // New text invalidates any manual expand state (fold keys won't match).
     if (a !== lastA || b !== lastB) { expandedFolds.clear(); lastA = a; lastB = b; }
     if (a === "" && b === "") {
-      result.innerHTML = '<div class="empty">Type or paste text in both boxes to compare.</div>';
+      result.innerHTML = '<div class="placeholder"><span class="big">Type or paste text in both boxes to compare.</span>' +
+        '<span>Nothing you paste here is uploaded — the comparison runs in this tab.</span></div>';
       stats.textContent = "Type or paste text in both boxes to compare.";
       indexHunks();
       return;
@@ -142,7 +146,7 @@
     const out = window.ClearDiff.compare(a, b, opts());
     if (out.stats.identical) {
       const why = (optWs.checked || optCase.checked || optBlank.checked) ? " (with the chosen ignore options)" : "";
-      result.innerHTML = '<div class="empty">✓ The two texts are identical' + why + ".</div>";
+      result.innerHTML = '<div class="placeholder"><span class="big">✓ The two texts are identical' + why + ".</span></div>";
     } else {
       let toRender = out;
       if (fold) {
@@ -379,7 +383,7 @@
     if (!file) return;
     if (file.size > MAX_FILE_BYTES) {
       stats.textContent = "That file is too large (" + (file.size / 1048576).toFixed(1) +
-        " MB). ClearDiff handles up to " + (MAX_FILE_BYTES / 1048576) + " MB locally.";
+        " MB). DiffLens handles up to " + (MAX_FILE_BYTES / 1048576) + " MB locally.";
       return;
     }
     const reader = new FileReader();

@@ -1,3 +1,9 @@
 *.pem
 *-upload.zip
 .DS_Store
+
+# cm 工作流的实时状态（状态条用，非产物）
+.cm-status.json
+
+# 像素比对的中间产物（由 AC-012 脚本按需生成）
+1.compare-page-redesign/design-baseline/*.png

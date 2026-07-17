@@ -1,0 +1,1430 @@
+<meta charset="utf-8" />
+<title>DiffLens — UI v2</title>
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   DiffLens UI v2 — 结构基准稿
+   功能集 = PRD F-001..F-043，不多不少。布局重做，语义色为契约。
+   母题：gutter/接缝 —— diff 的定义性结构是两份文本被缝合处的竖栏。
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  --ground:   #FCFCFD;
+  --panel:    #F3F4F7;
+  --field:    #FFFFFF;
+  --line:     #E3E5EA;
+  --ink:      #191C22;
+  --ink-soft: #656B78;
+  --accent:   #3B4FD8;
+  --accent-soft: rgba(59, 79, 216, 0.10);
+
+  /* 语义色：契约。三档共用同一 L 与同一 C，只有色相不同 —— 视觉重量真正相等。
+     L/C 不是拍脑袋：红色相(22)在 sRGB 里的彩度天花板远低于绿(150)，
+     L=0.945 时红只到 C=0.030。给超了会被色域映射静默压低 L，
+     对齐就白做了（实测踩过：L 掉到 0.9316，极差回到 GitHub 水平）。
+     L=0.92 是三色相共用 C=0.045 的落点，正文对比度 13.2。 */
+  --add-bg:   oklch(0.92 0.045 150);
+  --add-word: oklch(0.83 0.096 150);
+  --add-ink:  oklch(0.440 0.120 150);
+  --del-bg:   oklch(0.92 0.045 22);
+  --del-word: oklch(0.83 0.096 22);
+  --del-ink:  oklch(0.470 0.160 22);
+  --chg-bg:   oklch(0.92 0.045 85);
+  --chg-ink:  oklch(0.470 0.100 75);
+  --minor-bg: oklch(0.965 0.004 265);
+  --ws:       #B9BEC9;
+
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:   #15171C;
+    --panel:    #1B1E25;
+    --field:    #101216;
+    --line:     #2C3039;
+    --ink:      #E7E9EE;
+    --ink-soft: #98A0AF;
+    --accent:   #8A9BFF;
+    --accent-soft: rgba(138, 155, 255, 0.14);
+
+    /* 暗色三档同样共用 L=0.30 / C=0.060（实测该 L 下共用安全彩度上限 0.0737，未超域）*/
+    --add-bg:   oklch(0.30 0.060 150);
+    --add-word: oklch(0.44 0.100 150);
+    --add-ink:  oklch(0.800 0.140 150);
+    --del-bg:   oklch(0.30 0.060 22);
+    --del-word: oklch(0.44 0.100 22);
+    --del-ink:  oklch(0.800 0.120 18);
+    --chg-bg:   oklch(0.30 0.060 85);
+    --chg-ink:  oklch(0.830 0.100 85);
+    --minor-bg: oklch(0.260 0.005 265);
+    --ws:       #4E5563;
+  }
+}
+/* 观看者的主题切换必须双向压过 media query */
+:root[data-theme="dark"] {
+  --ground: #15171C; --panel: #1B1E25; --field: #101216; --line: #2C3039;
+  --ink: #E7E9EE; --ink-soft: #98A0AF; --accent: #8A9BFF;
+  --accent-soft: rgba(138, 155, 255, 0.14);
+  --add-bg: oklch(0.30 0.060 150); --add-word: oklch(0.44 0.100 150); --add-ink: oklch(0.800 0.140 150);
+  --del-bg: oklch(0.30 0.060 22);  --del-word: oklch(0.44 0.100 22);  --del-ink: oklch(0.800 0.120 18);
+  --chg-bg: oklch(0.30 0.060 85);  --chg-ink: oklch(0.830 0.100 85);
+  --minor-bg: oklch(0.260 0.005 265); --ws: #4E5563;
+}
+:root[data-theme="light"] {
+  --ground: #FCFCFD; --panel: #F3F4F7; --field: #FFFFFF; --line: #E3E5EA;
+  --ink: #191C22; --ink-soft: #656B78; --accent: #3B4FD8;
+  --accent-soft: rgba(59, 79, 216, 0.10);
+  --add-bg: oklch(0.92 0.045 150); --add-word: oklch(0.83 0.096 150); --add-ink: oklch(0.440 0.120 150);
+  --del-bg: oklch(0.92 0.045 22);  --del-word: oklch(0.83 0.096 22);  --del-ink: oklch(0.470 0.160 22);
+  --chg-bg: oklch(0.92 0.045 85);  --chg-ink: oklch(0.470 0.100 75);
+  --minor-bg: oklch(0.965 0.004 265); --ws: #B9BEC9;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 13px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 布局：顶栏 / 输入 / 选项条 / 结果 / 底部状态栏 ─────────────
+   骨架取自 Stitch 稿，两条理由都是实的：
+   ① 结果区独占全宽 —— 原左导轨要吃 216px，在 split 视图里等于每侧
+      少约 13 个字符，而横向空间正是对比工具最不该省的东西；
+   ② 选项条紧贴结果区 —— 选项影响的是 diff 不是输入，邻接性更对；
+      且独占整行后 8 个控件比原版挤在顶栏跟品牌抢位置宽裕得多
+      （PRD 开放问题 #1 照样解决，且不花那 216px）。
+   统计与跳转沉到底部状态栏（IDE 惯例），把结果区顶部让给内容。 */
+.app {
+  display: grid;
+  /* The result row keeps a 160px floor and the app only *starts* at the viewport
+     height. Both matter: the input row is `auto`, so it grows honestly when the
+     user drags a textarea's resize handle, and a `1fr` with a 0 floor under a
+     locked `height: 100vh` would let it squeeze the diff down to nothing with no
+     scrollbar to get it back — drag to 700px and one row survives; to 900px, none.
+     With a floor and min-height, the page scrolls instead of eating the diff. */
+  grid-template-rows: auto auto auto minmax(160px, 1fr) auto;
+  /* Same trap on the column axis: an implicit `auto` column takes its minimum
+     from the widest row's min-content, so the top bar's 498px min-content became
+     the page's floor and everything below 500px scrolled sideways. The bar never
+     got the chance to shrink — its flex items' min-width:0 and ellipsis only
+     matter once the box is actually constrained. minmax(0, 1fr) constrains it. */
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+}
+
+/* 顶栏：品牌 + 隐私承诺 + 历史/导出 */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: 40px; padding: 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mark {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; flex: 0 0 auto;
+  border-radius: 7px;
+  background: var(--accent); color: #fff;
+  font: 600 14px/1 var(--mono);
+}
+.wordmark { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+/* 隐私承诺是产品最核心的差异点，常驻顶栏（PRD F-043）。
+   用词严格对齐事实：本地运行、不上传。不是加密 —— 不做的事不许写。 */
+.privacy {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 4px; padding: 3px 10px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--ground);
+  white-space: nowrap; min-width: 0;
+}
+.privacy b {
+  font: 600 9.5px/1 var(--mono);
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--add-ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+/* min-width on both: a flex item defaults to min-width:auto, which on nowrap text
+   is the full string — the ellipsis never gets a chance and the bar just refuses
+   to go below its min-content, scrolling the page sideways instead. */
+.privacy span {
+  font-size: 10.5px; color: var(--ink-soft);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.topacts { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
+
+/* 选项条：3 组 + 视图切换，独占整行 */
+.optbar {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  padding: 5px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+/* Groups wrap internally too, or the widest one (Display, at 463px) sets a floor
+   the page can't go under and narrow windows scroll sideways. */
+.group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 11px; padding: 3px 14px; }
+.group:first-child { padding-left: 0; }
+.group + .group { border-left: 1px solid var(--line); }
+.glabel {
+  font: 500 9.5px/1 var(--mono);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-soft);
+  user-select: none;
+}
+.chk {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--ink);
+  user-select: none; cursor: pointer; white-space: nowrap;
+}
+.chk input { accent-color: var(--accent); margin: 0; cursor: pointer; }
+.chk:hover { color: var(--accent); }
+
+.action {
+  font: 500 11.5px/1 var(--mono);
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--ground);
+  color: var(--accent);
+  cursor: pointer; white-space: nowrap;
+}
+.action:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* 底部状态栏：统计 + 跳转 + 键盘提示 */
+.statusbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: 30px; padding: 0 12px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.statusbar kbd {
+  font: 9.5px/1 var(--mono);
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--ground);
+  color: var(--ink-soft);
+}
+.hint { font: 9.5px/1 var(--mono); color: var(--ink-soft); display: flex; align-items: center; gap: 4px; }
+
+/* 输入区 */
+.io {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0;
+  padding: 12px 12px 10px;
+}
+.pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pane-head h2 {
+  margin: 0;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.pane-acts { display: inline-flex; gap: 10px; }
+.link {
+  border: 0; background: none; padding: 0;
+  font: 11px/1 var(--sans);
+  color: var(--accent); cursor: pointer;
+}
+.link:hover { text-decoration: underline; }
+textarea {
+  height: 22vh; min-height: 120px;
+  width: 100%; resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--ink);
+  font: 12px/1.5 var(--mono);
+  tab-size: 2;
+}
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea.dragover { border-color: var(--accent); border-style: dashed; background: var(--accent-soft); }
+textarea::placeholder { color: var(--ink-soft); }
+
+/* 中缝：swap 挂在两栏之间的接缝上 */
+.seam { display: flex; align-items: center; justify-content: center; width: 44px; position: relative; }
+.seam::before {
+  content: ""; position: absolute; top: 26px; bottom: 0; left: 50%;
+  border-left: 1px solid var(--line);
+}
+.swap {
+  position: relative; z-index: 1;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ground);
+  color: var(--ink-soft);
+  font-size: 13px; cursor: pointer;
+}
+.swap:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 结果区：独占全宽，上下都无工具栏 —— 内容拿走最大面积 */
+.stage { display: grid; min-height: 0; padding: 10px 12px; }
+.stats { font: 11.5px/1 var(--mono); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.stats .add   { color: var(--add-ink); font-weight: 600; cursor: pointer; }
+.stats .del   { color: var(--del-ink); font-weight: 600; cursor: pointer; }
+.stats .minorc{ color: var(--ink-soft); font-weight: 600; cursor: pointer; }
+.stats .movedc{ color: var(--accent); font-weight: 600; }
+.stats .same  { color: var(--add-ink); font-weight: 600; }
+.stats .add:hover, .stats .del:hover, .stats .minorc:hover { text-decoration: underline; }
+
+.nav { display: inline-flex; align-items: center; gap: 3px; }
+.navbtn {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--ground); color: var(--ink);
+  font-size: 11px; cursor: pointer;
+}
+.navbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.navbtn:disabled { opacity: 0.38; cursor: default; }
+.navcount {
+  min-width: 52px; text-align: center;
+  font: 10.5px/1 var(--mono); color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin-left: auto; }
+.segbtn {
+  border: 0; background: var(--ground); color: var(--ink-soft);
+  font: 500 11px/1 var(--mono); letter-spacing: 0.04em;
+  padding: 6px 11px; cursor: pointer;
+}
+.segbtn + .segbtn { border-left: 1px solid var(--line); }
+.segbtn:hover { color: var(--accent); }
+/* The selected view is only ever signalled by this fill, so the label on it has
+   to stay readable. White on the dark theme's lighter accent is 2.56:1. */
+.segbtn.on { background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .segbtn.on { color: #10131c; } }
+:root[data-theme="dark"] .segbtn.on { color: #10131c; }
+:root[data-theme="light"] .segbtn.on { color: #fff; }
+
+.menu { position: relative; }
+.menu > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  font: 11px/1 var(--sans); color: var(--accent);
+  padding: 6px 2px;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary:hover { text-decoration: underline; }
+.sheet {
+  position: absolute; right: 0; top: calc(100% + 5px); z-index: 20;
+  display: flex; flex-direction: column;
+  min-width: 190px; padding: 4px;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 30px rgba(10, 12, 20, 0.16);
+}
+.item {
+  border: 0; background: none; text-align: left;
+  font: 12px/1 var(--sans); color: var(--ink);
+  padding: 8px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.item:hover { background: var(--accent-soft); color: var(--accent); }
+
+.histsheet { min-width: 292px; }
+.hist-list { max-height: 300px; overflow: auto; margin-top: 3px; }
+.hist-empty { padding: 10px 9px; font-size: 11.5px; color: var(--ink-soft); }
+.hist-item { display: flex; align-items: stretch; gap: 2px; }
+.hist-restore {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  border: 0; background: none; text-align: left; cursor: pointer;
+  padding: 7px 9px; border-radius: 6px; color: var(--ink);
+}
+.hist-restore:hover { background: var(--accent-soft); }
+.hist-prev { font: 11.5px/1.3 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-time { font: 10px/1 var(--mono); color: var(--ink-soft); }
+.hist-del {
+  border: 0; background: none; cursor: pointer;
+  color: var(--ink-soft); padding: 0 9px; border-radius: 6px; font-size: 11px;
+}
+.hist-del:hover { background: var(--del-bg); color: var(--del-ink); }
+
+/* ── 结果表面 ─────────────────────────────────────────────── */
+.result {
+  min-height: 0; overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+  font: 12px/1.55 var(--mono);
+}
+.row { display: flex; align-items: flex-start; }
+.num {
+  flex: 0 0 62px;
+  display: flex; gap: 6px; justify-content: flex-end;
+  padding: 0 8px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border-right: 1px solid var(--line);   /* 第三道缝：行号 gutter */
+  user-select: none; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.num span { display: inline-block; min-width: 22px; text-align: right; }
+.sign { flex: 0 0 18px; text-align: center; color: var(--ink-soft); user-select: none; }
+.txt { flex: 1; min-width: 0; padding: 0 10px 0 2px; white-space: pre; }
+.result.wrap .txt { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.row.equal { color: var(--ink); }
+.row.add   { background: var(--add-bg); }
+.row.del   { background: var(--del-bg); }
+.row.change{ background: var(--chg-bg); }
+.row.minor { background: var(--minor-bg); color: var(--ink-soft); }
+.row.add .sign { color: var(--add-ink); }
+.row.del .sign { color: var(--del-ink); }
+.row.change .sign { color: var(--chg-ink); }
+.row.moved, .scol.moved { box-shadow: inset 3px 0 0 var(--accent); }
+.row.jumped, .srow.jumped { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+ins { background: var(--add-word); text-decoration: none; border-radius: 2px; padding: 0 1px; }
+del { background: var(--del-word); text-decoration: none; border-radius: 2px; padding: 0 1px; }
+.ws { color: var(--ws); }
+.movetag {
+  margin-left: 8px; padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--ground);
+  color: var(--accent);
+  font: 600 9.5px/1.5 var(--mono);
+  letter-spacing: 0.03em;
+  white-space: nowrap; user-select: none;
+}
+
+/* split */
+.srow { display: flex; align-items: stretch; }
+.scol { flex: 1 1 50%; min-width: 0; display: flex; align-items: flex-start; }
+.scol.b { border-left: 1px solid var(--line); }
+.snum {
+  flex: 0 0 40px; text-align: right; padding: 0 8px;
+  color: var(--ink-soft); background: var(--panel);
+  border-right: 1px solid var(--line);
+  user-select: none; white-space: nowrap;
+  font-variant-numeric: tabular-nums; font-size: 11px;
+}
+.stxt { flex: 1; min-width: 0; padding: 0 9px; white-space: pre; }
+.result.wrap .stxt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scol.del { background: var(--del-bg); }
+.scol.add { background: var(--add-bg); }
+.scol.chg { background: var(--chg-bg); }
+.scol.minor { background: var(--minor-bg); color: var(--ink-soft); }
+.scol.blank { background: var(--panel); }
+
+/* 折叠带 */
+.row.fold { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.foldbtn {
+  width: 100%; border: 0; background: none; cursor: pointer;
+  color: var(--accent); font: 11px/1 var(--mono);
+  padding: 6px 8px; text-align: center; letter-spacing: 0.04em;
+}
+.foldbtn:hover { background: var(--accent-soft); }
+
+.placeholder {
+  display: grid; place-items: center; gap: 6px;
+  height: 100%; min-height: 180px; padding: 24px;
+  text-align: center; color: var(--ink-soft);
+  font: 12px/1.6 var(--sans);
+}
+.placeholder .big { font: 500 13px/1 var(--mono); color: var(--ink); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.segbtn:focus-visible, .item:focus-visible, .hist-restore:focus-visible { outline-offset: -2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* Stack only when side-by-side panes would be genuinely unusable (~220px each).
+   Stacking is not free: two panes bill the page twice over, and the diff pays.
+   Measured, 31-row diff, rows fully visible — stack at 900px vs at 480px:
+     1440px  28 / 28      880px  20 -> 27      620px  12 -> 18
+   The old single-column layout showed 26 / 26 / 19 at those widths. Reading more
+   diff beats wider input boxes: the panes are for pasting into, the result is
+   what you actually read. */
+@media (max-width: 480px) {
+  .io { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  textarea { height: 14vh; min-height: 96px; }
+  .seam { width: auto; height: 36px; }
+  .seam::before { top: 50%; bottom: auto; left: 0; right: 0; border-left: 0; border-top: 1px solid var(--line); }
+  /* 不隐藏隐私副文案：实测 620px 时顶栏仍余 305px，藏了一分空间不省，
+     却弱化了产品最核心的承诺（PRD F-043 明写不得弱化）。 */
+  .seg { margin-left: 0; }
+  .group + .group { border-left: 0; }
+}
+
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">≠</span>
+      <span class="wordmark">DiffLens</span>
+      <span class="privacy" title="Everything runs in this tab. Nothing is uploaded.">
+        <b>🔒 100% local</b>
+        <span>no upload · no account · no ads</span>
+      </span>
+    </div>
+    <div class="topacts">
+      <details class="menu" id="history">
+        <summary aria-haspopup="menu" title="Saved comparisons (local only)">History ▾</summary>
+        <div class="sheet histsheet" role="menu">
+          <button class="item" id="hist-save" role="menuitem">＋ Save current comparison</button>
+          <div class="hist-list" id="hist-list"></div>
+        </div>
+      </details>
+      <details class="menu" id="export">
+        <summary aria-haspopup="menu" title="Export the diff">Export ▾</summary>
+        <div class="sheet" role="menu">
+          <button class="item" id="copy" role="menuitem">Copy result (text)</button>
+          <button class="item" id="copy-diff" role="menuitem">Copy unified diff</button>
+          <button class="item" id="copy-md" role="menuitem">Copy as Markdown</button>
+          <button class="item" id="dl-patch" role="menuitem">Download .patch</button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <section class="io">
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Original (A)</h2>
+          <span class="pane-acts">
+            <button class="link" data-file="a">open file…</button>
+            <button class="link" data-clear="a">clear</button>
+          </span>
+        </div>
+        <textarea id="text-a" spellcheck="false" aria-label="Original text (A)"
+          placeholder="Paste, drop a file here, or right-click selected text on a page → set as Text A"></textarea>
+        <input type="file" id="file-a" hidden />
+      </div>
+
+      <div class="seam">
+        <button class="swap" id="swap" title="Swap A and B" aria-label="Swap A and B">⇄</button>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head">
+          <h2>Changed (B)</h2>
+          <span class="pane-acts">
+            <button class="link" data-file="b">open file…</button>
+            <button class="link" data-clear="b">clear</button>
+          </span>
+        </div>
+        <textarea id="text-b" spellcheck="false" aria-label="Changed text (B)"
+          placeholder="Paste, drop a file here, or right-click → set as Text B"></textarea>
+        <input type="file" id="file-b" hidden />
+      </div>
+    </section>
+
+  <section class="optbar">
+    <!-- The group heading is what makes "Whitespace" mean *ignore* whitespace, so
+         it has to reach the accessibility tree too — otherwise this toggle and
+         "Show whitespace" below read as near-identical names doing opposite things. -->
+    <div class="group" role="group" aria-labelledby="g-ignore">
+      <span class="glabel" id="g-ignore">Ignore</span>
+      <label class="chk"><input type="checkbox" id="opt-ws" aria-label="Ignore whitespace" /> Whitespace</label>
+      <label class="chk"><input type="checkbox" id="opt-blank" aria-label="Ignore blank lines" /> Blank lines</label>
+      <label class="chk"><input type="checkbox" id="opt-case" aria-label="Ignore case" /> Case</label>
+    </div>
+    <div class="group" role="group" aria-labelledby="g-precision">
+      <span class="glabel" id="g-precision">Precision</span>
+      <label class="chk"><input type="checkbox" id="opt-char" /> Character level</label>
+      <button class="action" id="fmt-json" title="Parse, sort keys &amp; pretty-print both sides — a structural JSON compare that ignores key order &amp; formatting">{ }&nbsp;&nbsp;Format JSON</button>
+    </div>
+    <div class="group" role="group" aria-labelledby="g-display">
+      <span class="glabel" id="g-display">Display</span>
+      <label class="chk"><input type="checkbox" id="opt-ws-show" /> Show whitespace</label>
+      <label class="chk" title="Collapse long runs of unchanged lines (large files); click a band to expand"><input type="checkbox" id="opt-fold" /> Collapse unchanged</label>
+      <label class="chk"><input type="checkbox" id="opt-wrap" checked /> Word wrap</label>
+    </div>
+    <div class="seg" role="group" aria-label="View">
+      <button class="segbtn on" data-view="unified">Unified</button>
+      <button class="segbtn" data-view="split">Split</button>
+      <button class="segbtn" data-view="inline" title="Original text with changes marked inline">Inline</button>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div id="result" class="result wrap" role="region" aria-label="Comparison result" aria-live="polite"></div>
+  </section>
+
+  <footer class="statusbar">
+    <span id="stats" class="stats" title="Click the added / removed counts to jump to the first difference">Type or paste text in both boxes to compare.</span>
+    <div class="nav" role="group" aria-label="Jump between differences">
+      <span class="hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd></span>
+      <button id="nav-prev" class="navbtn" title="Previous difference (Alt+↑)" disabled>↑</button>
+      <span id="nav-count" class="navcount">—</span>
+      <button id="nav-next" class="navbtn" title="Next difference (Alt+↓)" disabled>↓</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+// ClearDiff diff engine — dependency-free, 100% local.
+// Line-level LCS diff with common prefix/suffix trimming, plus word-level
+// intra-line highlighting for changed lines. No network, no libraries.
+
+(function (root) {
+  "use strict";
+
+  // Hard cap on the LCS DP matrix (cells = n*m). The matrix is the dominant cost in
+  // both time and memory (~4 bytes/cell). Above this we degrade gracefully instead of
+  // freezing the tab — the realistic danger is two LARGE, DISSIMILAR inputs (prefix/
+  // suffix trimming keeps similar inputs cheap) or char-level diff of a long no-space
+  // line (minified JS, base64, data-URIs). ~4M cells ≈ 16MB, comfortably safe.
+  const MAX_CELLS = 4000000;
+
+  // Tokenize a line into words and whitespace runs (kept so we can reconstruct).
+  function tokenizeWords(s) {
+    return s.match(/\s+|\S+/g) || [];
+  }
+
+  // Build a comparison key for a line honoring the ignore options. The original
+  // text is always preserved for display; only the key used for matching changes.
+  function lineKey(line, opts) {
+    let k = line;
+    if (opts.ignoreCase) k = k.toLowerCase();
+    if (opts.ignoreWhitespace) k = k.replace(/\s+/g, " ").trim();
+    return k;
+  }
+
+  // Longest-common-subsequence over arrays of keys. Returns matched index pairs
+  // [{ai, bi}, ...] in increasing order, or null when the input is too large to
+  // align safely (caller degrades to a coarse block replace). Uint32Array rows.
+  function lcsMatches(aKeys, bKeys) {
+    const n = aKeys.length, m = bKeys.length;
+    if (n === 0 || m === 0) return [];
+    if (n * m > MAX_CELLS) return null; // too big — signal graceful degradation
+    // DP table of (n+1) rows × (m+1) cols.
+    const dp = [];
+    for (let i = 0; i <= n; i++) dp.push(new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      const ai = aKeys[i], row = dp[i], next = dp[i + 1];
+      for (let j = m - 1; j >= 0; j--) {
+        row[j] = ai === bKeys[j] ? next[j + 1] + 1 : Math.max(next[j], row[j + 1]);
+      }
+    }
+    const out = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (aKeys[i] === bKeys[j]) { out.push({ ai: i, bi: j }); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else j++;
+    }
+    return out;
+  }
+
+  // Produce a flat op list from two token/line arrays given their keys.
+  // Each op: {type:'equal'|'del'|'add', a?, b?} carrying ORIGINAL items.
+  function diffArrays(aArr, bArr, aKeys, bKeys) {
+    // Trim common prefix.
+    let start = 0;
+    while (start < aArr.length && start < bArr.length && aKeys[start] === bKeys[start]) start++;
+    // Trim common suffix.
+    let aEnd = aArr.length, bEnd = bArr.length;
+    while (aEnd > start && bEnd > start && aKeys[aEnd - 1] === bKeys[bEnd - 1]) { aEnd--; bEnd--; }
+
+    const ops = [];
+    for (let k = 0; k < start; k++) ops.push({ type: "equal", a: aArr[k], b: bArr[k] });
+
+    const midAKeys = aKeys.slice(start, aEnd);
+    const midBKeys = bKeys.slice(start, bEnd);
+    const matches = lcsMatches(midAKeys, midBKeys);
+    const aOff = start, bOff = start;
+
+    // Too large to align: degrade to a coarse block replace (all removed, then all
+    // added). Correct, just less granular than an LCS alignment.
+    if (matches === null) {
+      for (let k = 0; k < midAKeys.length; k++) ops.push({ type: "del", a: aArr[aOff + k] });
+      for (let k = 0; k < midBKeys.length; k++) ops.push({ type: "add", b: bArr[bOff + k] });
+      for (let k = aEnd; k < aArr.length; k++) ops.push({ type: "equal", a: aArr[k], b: bArr[bEnd + (k - aEnd)] });
+      return ops;
+    }
+
+    let ai = 0, bi = 0, mi = 0;
+    while (ai < midAKeys.length || bi < midBKeys.length) {
+      const match = matches[mi];
+      if (match && ai === match.ai && bi === match.bi) {
+        ops.push({ type: "equal", a: aArr[aOff + ai], b: bArr[bOff + bi] });
+        ai++; bi++; mi++;
+      } else if (match && bi === match.bi && ai < match.ai) {
+        ops.push({ type: "del", a: aArr[aOff + ai] }); ai++;
+      } else if (match && ai === match.ai && bi < match.bi) {
+        ops.push({ type: "add", b: bArr[bOff + bi] }); bi++;
+      } else if (!match) {
+        if (ai < midAKeys.length) { ops.push({ type: "del", a: aArr[aOff + ai] }); ai++; }
+        else if (bi < midBKeys.length) { ops.push({ type: "add", b: bArr[bOff + bi] }); bi++; }
+      } else {
+        // Before the next match: emit dels then adds.
+        if (ai < match.ai) { ops.push({ type: "del", a: aArr[aOff + ai] }); ai++; }
+        else if (bi < match.bi) { ops.push({ type: "add", b: bArr[bOff + bi] }); bi++; }
+      }
+    }
+
+    for (let k = aEnd; k < aArr.length; k++) ops.push({ type: "equal", a: aArr[k], b: bArr[bEnd + (k - aEnd)] });
+    return ops;
+  }
+
+  // Intra-line diff → array of {type, text}. Word-level by default; char-level
+  // when opts.charLevel (finer highlighting, good for code/IDs).
+  function diffWords(aLine, bLine, opts) {
+    opts = opts || {};
+    const tok = opts.charLevel ? (s) => Array.from(s) : tokenizeWords;
+    const aTok = tok(aLine);
+    const bTok = tok(bLine);
+    // Guard: an intra-line LCS over very many tokens (e.g. char-level on a long
+    // no-space line) would be quadratic. Fall back to a whole-line change.
+    if (aTok.length * bTok.length > MAX_CELLS) {
+      return [{ type: "del", text: aLine }, { type: "add", text: bLine }];
+    }
+    const key = (t) => {
+      let k = t;
+      if (opts.ignoreCase) k = k.toLowerCase();
+      if (opts.ignoreWhitespace && /^\s+$/.test(k)) k = " ";
+      return k;
+    };
+    const ops = diffArrays(aTok, bTok, aTok.map(key), bTok.map(key));
+    return ops.map((o) => ({
+      type: o.type,
+      text: o.type === "add" ? o.b : o.a,
+    }));
+  }
+
+  // Main entry: returns { rows, stats }.
+  // rows: [{type, aNum, bNum, aWords?, bWords?, text?}]
+  function compare(textA, textB, options) {
+    const opts = Object.assign(
+      { ignoreWhitespace: false, ignoreCase: false, ignoreBlankLines: false, charLevel: false },
+      options || {}
+    );
+    // Carry each line's ORIGINAL 1-based number so display line numbers stay true
+    // even when blank lines are filtered out of the comparison.
+    const split = (txt) => txt.split(/\r\n|\r|\n/).map((t, i) => ({ t, n: i + 1 }));
+    let aLines = split(textA);
+    let bLines = split(textB);
+    const rawA = aLines.length, rawB = bLines.length;
+    if (opts.ignoreBlankLines) {
+      const nb = (arr) => arr.filter((o) => o.t.trim() !== "");
+      aLines = nb(aLines); bLines = nb(bLines);
+    }
+    const aKeys = aLines.map((o) => lineKey(o.t, opts));
+    const bKeys = bLines.map((o) => lineKey(o.t, opts));
+    const ops = diffArrays(aLines, bLines, aKeys, bKeys);
+
+    const rows = [];
+    let added = 0, removed = 0, minor = 0;
+
+    // Flush a contiguous block of removed + added lines, pairing them POSITIONALLY
+    // (del[i] with add[i]) so "modified line N" lines up with "modified line N",
+    // not last-del-with-first-add. Leftover dels/adds emit as pure del/add rows.
+    // Items are {t,n} line objects so display line numbers stay true to the source.
+    function flushBlock(dels, adds) {
+      const paired = Math.min(dels.length, adds.length);
+      for (let k = 0; k < paired; k++) {
+        removed++; added++;
+        let words = diffWords(dels[k].t, adds[k].t, opts);
+        // Auto-refine: if word-level found NO common word (so the whole line would
+        // be highlighted — e.g. a no-space path/URL/identifier), fall back to
+        // character-level to highlight only the characters that actually differ.
+        if (!opts.charLevel && dels[k].t && adds[k].t && !words.some((w) => w.type === "equal")) {
+          const charWords = diffWords(dels[k].t, adds[k].t, Object.assign({}, opts, { charLevel: true }));
+          if (charWords.some((w) => w.type === "equal")) words = charWords;
+        }
+        rows.push({
+          type: "change", aNum: dels[k].n, bNum: adds[k].n,
+          words: words, // full merged sequence (equal/del/add) — for the inline view
+          aWords: words.filter((w) => w.type !== "add"),
+          bWords: words.filter((w) => w.type !== "del"),
+        });
+      }
+      for (let k = paired; k < dels.length; k++) { removed++; rows.push({ type: "del", aNum: dels[k].n, text: dels[k].t }); }
+      for (let k = paired; k < adds.length; k++) { added++; rows.push({ type: "add", bNum: adds[k].n, text: adds[k].t }); }
+    }
+
+    let dels = [], adds = [];
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      if (op.type === "del") dels.push(op.a);
+      else if (op.type === "add") adds.push(op.b);
+      else { // lenient-equal: close any open block first
+        if (dels.length || adds.length) { flushBlock(dels, adds); dels = []; adds = []; }
+        if (op.a.t === op.b.t) {
+          rows.push({ type: "equal", aNum: op.a.n, bNum: op.b.n, text: op.a.t });
+        } else {
+          // Lines matched only because an ignore option (whitespace/case) is on, yet
+          // their raw text differs → an UNIMPORTANT difference (BC's 3rd state).
+          minor++;
+          const words = diffWords(op.a.t, op.b.t, opts);
+          rows.push({
+            type: "minor", aNum: op.a.n, bNum: op.b.n,
+            aText: op.a.t, bText: op.b.t, words: words,
+            aWords: words.filter((w) => w.type !== "add"),
+            bWords: words.filter((w) => w.type !== "del"),
+          });
+        }
+      }
+    }
+    if (dels.length || adds.length) flushBlock(dels, adds);
+    const moved = detectMoves(rows);
+    const identical = added === 0 && removed === 0 && minor === 0;
+    const onlyMinor = added === 0 && removed === 0 && minor > 0;
+    return { rows, stats: { added, removed, minor, moved, identical, onlyMinor, aLines: rawA, bLines: rawB } };
+  }
+
+  // A line is "movable" (worth move-detecting) only if it's non-trivial: long enough
+  // and containing an alphanumeric char. This keeps lines like "}", ");", "" or "---"
+  // from being matched all over the place and producing noise.
+  function isMovable(text) {
+    const s = text.trim();
+    return s.length >= 3 && /[A-Za-z0-9]/.test(s);
+  }
+
+  // Detect moved lines: a pure-deletion line whose EXACT text reappears as a pure
+  // addition elsewhere is annotated on both sides (r.moved + r.movePartnerNum = the
+  // partner's source line number) so the UI can show "moved from/to line N" instead
+  // of an unrelated delete + add. Conservative: exact text match, non-trivial lines,
+  // each add claimed once. Returns the number of moved pairs.
+  function detectMoves(rows) {
+    const addsByText = new Map();
+    for (const r of rows) {
+      if (r.type === "add" && isMovable(r.text)) {
+        const list = addsByText.get(r.text);
+        if (list) list.push(r); else addsByText.set(r.text, [r]);
+      }
+    }
+    if (addsByText.size === 0) return 0;
+    let moved = 0;
+    const used = new Set();
+    for (const r of rows) {
+      if (r.type !== "del" || !isMovable(r.text)) continue;
+      const list = addsByText.get(r.text);
+      if (!list) continue;
+      const partner = list.find((x) => !used.has(x));
+      if (!partner) continue;
+      used.add(partner);
+      r.moved = true; r.movePartnerNum = partner.bNum;
+      partner.moved = true; partner.movePartnerNum = r.aNum;
+      moved++;
+    }
+    return moved;
+  }
+
+  // --- export helpers (pure, unit-testable) ------------------------------------
+  // Build a standard unified diff (git-style) from two texts. Reuses compare() so
+  // the same ignore options apply. `context` controls surrounding context lines.
+  // Returns "" when the inputs are identical (under the chosen options).
+  function toUnifiedDiff(textA, textB, options, fmtOpts) {
+    fmtOpts = fmtOpts || {};
+    const context = fmtOpts.context == null ? 3 : Math.max(0, fmtOpts.context | 0);
+    const aLabel = fmtOpts.aLabel || "Original";
+    const bLabel = fmtOpts.bLabel || "Changed";
+    const out = compare(textA, textB, options);
+    if (out.stats.identical) return "";
+
+    // Flatten display rows into tagged single lines: ' ' (context), '-' (del), '+' (add).
+    const joinW = (ws) => ws.map((w) => w.text).join("");
+    const entries = [];
+    for (const r of out.rows) {
+      if (r.type === "equal") entries.push({ tag: " ", text: r.text });
+      else if (r.type === "del") entries.push({ tag: "-", text: r.text });
+      else if (r.type === "add") entries.push({ tag: "+", text: r.text });
+      else if (r.type === "change") {
+        entries.push({ tag: "-", text: joinW(r.aWords) });
+        entries.push({ tag: "+", text: joinW(r.bWords) });
+      } else if (r.type === "minor") {
+        // Matched only under an ignore option but raw text differs — show the raw change.
+        entries.push({ tag: "-", text: r.aText });
+        entries.push({ tag: "+", text: r.bText });
+      }
+    }
+
+    // Assign 1-based source line numbers as we walk: ' ' advances both, '-' a-only,
+    // '+' b-only.
+    let an = 0, bn = 0;
+    for (const e of entries) {
+      if (e.tag !== "+") e.a = ++an; else e.a = null;
+      if (e.tag !== "-") e.b = ++bn; else e.b = null;
+    }
+
+    // Group changed lines into hunks, padding each side with `context` lines and
+    // merging groups whose contexts touch.
+    const changed = [];
+    for (let i = 0; i < entries.length; i++) if (entries[i].tag !== " ") changed.push(i);
+    if (!changed.length) return "";
+    const groups = [];
+    let gs = Math.max(0, changed[0] - context);
+    let ge = Math.min(entries.length - 1, changed[0] + context);
+    for (let k = 1; k < changed.length; k++) {
+      const idx = changed[k];
+      if (idx - context <= ge + 1) ge = Math.min(entries.length - 1, idx + context);
+      else { groups.push([gs, ge]); gs = Math.max(0, idx - context); ge = Math.min(entries.length - 1, idx + context); }
+    }
+    groups.push([gs, ge]);
+
+    const lines = ["--- a/" + aLabel, "+++ b/" + bLabel];
+    for (const [s, e] of groups) {
+      let aLen = 0, bLen = 0, aStart = 0, bStart = 0;
+      for (let i = s; i <= e; i++) {
+        const en = entries[i];
+        if (en.tag !== "+") { aLen++; if (!aStart) aStart = en.a; }
+        if (en.tag !== "-") { bLen++; if (!bStart) bStart = en.b; }
+      }
+      // Pure-addition / pure-deletion hunks: start is the preceding line (count before group).
+      if (aLen === 0) aStart = entries.slice(0, s).filter((x) => x.tag !== "+").length;
+      if (bLen === 0) bStart = entries.slice(0, s).filter((x) => x.tag !== "-").length;
+      lines.push("@@ -" + aStart + "," + aLen + " +" + bStart + "," + bLen + " @@");
+      for (let i = s; i <= e; i++) lines.push(entries[i].tag + entries[i].text);
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  // Markdown export: a fenced ```diff block so it renders with red/green on GitHub
+  // and other Markdown viewers.
+  function toMarkdown(textA, textB, options, fmtOpts) {
+    const ud = toUnifiedDiff(textA, textB, options, fmtOpts);
+    if (!ud) return "";
+    return "```diff\n" + ud + "```\n";
+  }
+
+  // Collapse long runs of unchanged (equal) rows into a single foldable placeholder,
+  // keeping `context` unchanged rows next to each change so the diff stays readable on
+  // large, mostly-identical inputs. Pure: returns a NEW array whose items are either an
+  // original row or { type:"fold", count, key, hidden:[rows] }. Runs shorter than
+  // `minFold` are left expanded (folding them would only add clutter). Only "equal"
+  // rows fold; "minor" rows (and all real changes) are always kept visible.
+  function foldRows(rows, context, minFold) {
+    context = context == null ? 3 : Math.max(0, context | 0);
+    minFold = minFold == null ? 10 : Math.max(1, minFold | 0);
+    const n = rows.length;
+    const keep = new Array(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      if (rows[i].type !== "equal") {
+        keep[i] = true;
+        for (let d = 1; d <= context; d++) {
+          if (i - d >= 0) keep[i - d] = true;
+          if (i + d < n) keep[i + d] = true;
+        }
+      }
+    }
+    const out = [];
+    let i = 0;
+    while (i < n) {
+      if (keep[i]) { out.push(rows[i]); i++; continue; }
+      let j = i;
+      while (j < n && !keep[j]) j++;
+      const run = rows.slice(i, j);
+      if (run.length >= minFold) {
+        const f = run[0];
+        out.push({ type: "fold", count: run.length, hidden: run,
+          key: "f" + (f.aNum || 0) + "_" + (f.bNum || 0) + "_" + run.length });
+      } else {
+        for (const r of run) out.push(r);
+      }
+      i = j;
+    }
+    return out;
+  }
+
+  root.ClearDiff = { compare, diffWords, toUnifiedDiff, toMarkdown, foldRows };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+// DiffLens comparison history — pure, dependency-free helpers (no DOM, no chrome).
+// The UI (app.js) owns storage + id/timestamp creation; this module owns the list
+// shape so it can be unit-tested in Node. Attaches to window/globalThis like diff.js.
+
+(function (root) {
+  "use strict";
+
+  const MAX_ENTRIES = 12;
+  // Skip saving very large inputs — chrome.storage.local has a ~10MB quota and a
+  // dozen multi-MB snapshots would blow it. (utf-16: ~2 bytes/char.)
+  const MAX_ENTRY_BYTES = 500 * 1024;
+
+  function firstLine(s) {
+    const lines = (s || "").split(/\r\n|\r|\n/);
+    const t = lines.find((x) => x.trim() !== "");
+    if (!t) return "(empty)";
+    return t.length > 40 ? t.slice(0, 40) + "…" : t;
+  }
+
+  // A short human label for a snapshot: "first line of A → first line of B".
+  function preview(a, b) {
+    return firstLine(a) + " → " + firstLine(b);
+  }
+
+  // Rough utf-16 byte size of the pair; used to decide whether it's safe to store.
+  function tooLarge(a, b) {
+    return (((a ? a.length : 0) + (b ? b.length : 0)) * 2) > MAX_ENTRY_BYTES;
+  }
+
+  // Insert a snapshot at the front, dropping any exact duplicate (same A & B) and
+  // capping the list length. Returns a NEW array (never mutates the input).
+  function add(list, entry) {
+    const next = (Array.isArray(list) ? list : []).filter(
+      (e) => !(e.a === entry.a && e.b === entry.b)
+    );
+    next.unshift(entry);
+    return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
+  }
+
+  function remove(list, id) {
+    return (Array.isArray(list) ? list : []).filter((e) => e.id !== id);
+  }
+
+  root.DiffLensHistory = { preview, tooLarge, add, remove, MAX_ENTRIES, MAX_ENTRY_BYTES };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var ta = $("text-a"), tb = $("text-b");
+  var optWs = $("opt-ws"), optCase = $("opt-case"), optBlank = $("opt-blank");
+  var optChar = $("opt-char"), optWsShow = $("opt-ws-show"), optFold = $("opt-fold"), optWrap = $("opt-wrap");
+  var result = $("result"), stats = $("stats");
+  var navPrev = $("nav-prev"), navNext = $("nav-next"), navCount = $("nav-count");
+
+  var view = "unified", showWs = false, fold = false;
+  var hunks = [], hunkIdx = -1;
+  var expandedFolds = new Set(), lastA = null, lastB = null;
+  var FOLD_CONTEXT = 3;
+
+  // 演示内容用产品自己的 thesis 段落（真实内容，非 lorem）：v1 vs v2。
+  // 覆盖 change / moved / del / equal 四种行型。
+  // 行序经过编排：被移动的行，其删除点与重插点各自被 equal 行包围，
+  // 否则会被引擎的按位块配对吞成 change 行，移动检测就看不到它了
+  // （ARCHITECTURE.md 记为「块配对是启发式」的已知限制）。
+  var FEATURES = [
+    "- Click the toolbar icon → opens a full browser tab.",
+    "- Two-pane compare with a live diff.",
+    "- Unified, side-by-side (split), or inline view.",
+    "- Word- or character-level highlighting inside changed lines.",
+    "- Move detection — a line deleted here and re-added there is flagged.",
+    "- Format JSON — sorts keys & pretty-prints both sides.",
+    "- Compare local files — drag a file onto a pane.",
+    "- Right-click → \"set as Text A/B\" to capture from any page.",
+    "- Jump between differences (Alt+↑/↓) with a hunk counter.",
+    "- Show whitespace — reveal spaces (·), tabs (→) and trailing space.",
+    "- Unimportant differences are dimmed, not silently dropped.",
+    "- Export the diff — text, unified diff, Markdown, or .patch.",
+    "- Synchronized scrolling between the two input panes.",
+    "- Comparison history — save and restore snapshots locally.",
+    "- Ignore whitespace / blank lines / case; word-wrap; swap A↔B.",
+    "- Collapse unchanged — fold long runs of identical lines.",
+    "- Real source line numbers, kept even when blank lines are ignored.",
+    "- Panes, view, and options persist between opens.",
+    "- Light & dark, follows your system theme."
+  ];
+  var STEPS = [
+    "## Load it locally",
+    "",
+    "1. chrome://extensions → enable Developer mode.",
+    "2. Load unpacked → select this folder.",
+    "3. Click the toolbar icon to open the compare tab.",
+    ""
+  ];
+  ta.value = ["# DiffLens — Private Text Compare", "",
+    "A fast, 100% private text diff in the browser.",
+    "Paste or right-click two pieces of text and instantly see a clear,",
+    "readable difference — nothing uploaded, no account, no ads, no paywall.",
+    "",
+    "Built for comparing prose, not just code.",
+    "",
+    "## Features", ""
+  ].concat(FEATURES, [""], STEPS, [
+    "Word-wrap is on by default.",
+    "",
+    "Name is provisional."
+  ]).join("\n");
+  tb.value = ["# DiffLens — Private Text Compare", "",
+    "A fast, 100% private text diff that lives in your browser.",
+    "Paste or right-click two pieces of text and instantly see a clear,",
+    "readable difference — nothing uploaded, no account, no ads, no paywall.",
+    "",
+    "## Features", ""
+  ].concat(FEATURES, [""], STEPS, [
+    "",
+    "Built for comparing prose, not just code.",
+    "Name is provisional.",
+    "100% local — your text never leaves your browser."
+  ]).join("\n");
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function fmt(s) {
+    var h = esc(s);
+    if (showWs) h = h.replace(/\t/g, '<span class="ws">→</span>').replace(/ /g, '<span class="ws">·</span>');
+    return h;
+  }
+  function renderWords(words) {
+    return words.map(function (w) {
+      var t = fmt(w.text);
+      if (w.type === "del") return "<del>" + t + "</del>";
+      if (w.type === "add") return "<ins>" + t + "</ins>";
+      return t;
+    }).join("");
+  }
+  function moveTag(dir, n) {
+    return ' <span class="movetag" title="This line was moved, not added or removed">↕ moved ' + dir + " line " + n + "</span>";
+  }
+  function opts() {
+    return {
+      ignoreWhitespace: optWs.checked,
+      ignoreCase: optCase.checked,
+      ignoreBlankLines: optBlank.checked,
+      charLevel: optChar.checked
+    };
+  }
+  function numCell(a, b) {
+    return '<div class="num"><span>' + (a == null ? "" : a) + '</span><span>' + (b == null ? "" : b) + "</span></div>";
+  }
+  function urow(cls, sign, aNum, bNum, inner) {
+    return '<div class="row ' + cls + '">' + numCell(aNum, bNum) +
+      '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
+  }
+  function foldRowHtml(r) {
+    return '<div class="row fold"><button class="foldbtn" type="button" data-fold="' + esc(r.key) +
+      '" title="Show the hidden lines">⋯ ' + r.count + " unchanged lines · expand ⋯</button></div>";
+  }
+
+  function renderColumn(out, inlineChange) {
+    var html = [], prevImp = false;
+    out.rows.forEach(function (r) {
+      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; return; }
+      var imp = r.type === "del" || r.type === "add" || r.type === "change";
+      var hs = imp && !prevImp ? " hstart" : "";
+      if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
+      else if (r.type === "minor") html.push(urow("minor", "≈", r.aNum, r.bNum, renderWords(inlineChange ? r.words : r.bWords)));
+      else if (r.type === "del") html.push(urow("del" + hs + (r.moved ? " moved" : ""), "−", r.aNum, null, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")));
+      else if (r.type === "add") html.push(urow("add" + hs + (r.moved ? " moved" : ""), "+", null, r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : "")));
+      else if (r.type === "change") {
+        if (inlineChange) html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words)));
+        else {
+          html.push(urow("change" + hs, "−", r.aNum, null, renderWords(r.aWords)));
+          html.push(urow("change", "+", null, r.bNum, renderWords(r.bWords)));
+        }
+      }
+      prevImp = imp;
+    });
+    return html.join("");
+  }
+  function scol(cls, num, inner) {
+    return '<div class="scol ' + cls + '"><div class="snum">' + (num == null ? "" : num) + '</div><div class="stxt">' + inner + "</div></div>";
+  }
+  function renderSplit(out) {
+    var html = [], prevImp = false;
+    out.rows.forEach(function (r) {
+      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; return; }
+      var imp = r.type === "del" || r.type === "add" || r.type === "change";
+      var hs = imp && !prevImp ? " hstart" : "";
+      var left, right;
+      if (r.type === "equal") { left = scol("equal", r.aNum, fmt(r.text)); right = scol("equal b", r.bNum, fmt(r.text)); }
+      else if (r.type === "minor") { left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor b", r.bNum, renderWords(r.bWords)); }
+      else if (r.type === "del") { left = scol("del" + (r.moved ? " moved" : ""), r.aNum, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")); right = scol("blank b", null, ""); }
+      else if (r.type === "add") { left = scol("blank", null, ""); right = scol("add b" + (r.moved ? " moved" : ""), r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : "")); }
+      else { left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg b", r.bNum, renderWords(r.bWords)); }
+      html.push('<div class="srow' + hs + '">' + left + right + "</div>");
+      prevImp = imp;
+    });
+    return html.join("");
+  }
+
+  function render() {
+    try { renderDiff(); }
+    catch (e) {
+      result.innerHTML = '<div class="placeholder"><span class="big">Couldn’t compare this input' +
+        (e && e.message ? " (" + esc(String(e.message)) + ")" : "") + '.</span><span>Try smaller or simpler text.</span></div>';
+      stats.textContent = "Comparison error";
+    }
+  }
+  function renderDiff() {
+    var a = ta.value, b = tb.value;
+    if (a !== lastA || b !== lastB) { expandedFolds.clear(); lastA = a; lastB = b; }
+    if (a === "" && b === "") {
+      result.innerHTML = '<div class="placeholder"><span class="big">Type or paste text in both boxes to compare.</span>' +
+        '<span>Nothing you paste here is uploaded — the comparison runs in this tab.</span></div>';
+      stats.textContent = "Type or paste text in both boxes to compare.";
+      indexHunks();
+      return;
+    }
+    var out = window.ClearDiff.compare(a, b, opts());
+    if (out.stats.identical) {
+      var why = (optWs.checked || optCase.checked || optBlank.checked) ? " (with the chosen ignore options)" : "";
+      result.innerHTML = '<div class="placeholder"><span class="big">✓ The two texts are identical' + why + ".</span></div>";
+    } else {
+      var toRender = out;
+      if (fold) {
+        var folded = window.ClearDiff.foldRows(out.rows, FOLD_CONTEXT);
+        if (expandedFolds.size) {
+          folded = folded.reduce(function (acc, it) {
+            return acc.concat(it.type === "fold" && expandedFolds.has(it.key) ? it.hidden : [it]);
+          }, []);
+        }
+        toRender = { rows: folded };
+      }
+      result.innerHTML = view === "split" ? renderSplit(toRender) : renderColumn(toRender, view === "inline");
+    }
+    var minorTxt = out.stats.minor ? ' · <span class="minorc">≈' + out.stats.minor + " minor</span>" : "";
+    var movedTxt = out.stats.moved ? ' · <span class="movedc">↕' + out.stats.moved + " moved</span>" : "";
+    var head = out.stats.onlyMinor ? '<span class="same">No important differences</span> · ' : "";
+    stats.innerHTML = head +
+      '<span class="add">+' + out.stats.added + " added</span> · " +
+      '<span class="del">−' + out.stats.removed + " removed</span>" + minorTxt + movedTxt +
+      " · A: " + out.stats.aLines + " lines, B: " + out.stats.bLines + " lines";
+    indexHunks();
+  }
+
+  function indexHunks() {
+    hunks = [].slice.call(result.querySelectorAll(".hstart"));
+    hunkIdx = -1;
+    updateNav();
+  }
+  function updateNav() {
+    var n = hunks.length;
+    navPrev.disabled = n === 0; navNext.disabled = n === 0;
+    navCount.textContent = n === 0 ? "—" : (hunkIdx < 0 ? (n + (n === 1 ? " diff" : " diffs")) : (hunkIdx + 1) + " / " + n);
+  }
+  function jump(dir) {
+    if (!hunks.length) return;
+    if (hunkIdx < 0) hunkIdx = dir > 0 ? 0 : hunks.length - 1;
+    else hunkIdx = (hunkIdx + dir + hunks.length) % hunks.length;
+    hunks.forEach(function (h) { h.classList.remove("jumped"); });
+    var el = hunks[hunkIdx];
+    el.classList.add("jumped");
+    var box = result.getBoundingClientRect(), r = el.getBoundingClientRect();
+    result.scrollTop += (r.top - box.top) - (box.height / 2 - r.height / 2);
+    updateNav();
+  }
+
+  function plainDiffText() {
+    var out = window.ClearDiff.compare(ta.value, tb.value, opts());
+    return out.rows.map(function (r) {
+      if (r.type === "equal") return "  " + r.text;
+      if (r.type === "minor") return "~ " + r.bText;
+      if (r.type === "del") return "- " + r.text;
+      if (r.type === "add") return "+ " + r.text;
+      if (r.type === "change") return "- " + r.aWords.map(function (w) { return w.text; }).join("") + "\n+ " + r.bWords.map(function (w) { return w.text; }).join("");
+      return "";
+    }).join("\n");
+  }
+  function flashBtn(btn, label) {
+    if (!btn) return;
+    var old = btn.textContent;
+    btn.textContent = label;
+    setTimeout(function () { btn.textContent = old; }, 1200);
+  }
+  function closeMenu(id) { var d = $(id); if (d) d.open = false; }
+  function copyText(text, btn, okLabel) {
+    if (!text) return;
+    navigator.clipboard.writeText(text)
+      .then(function () { flashBtn(btn, okLabel || "Copied ✓"); })
+      .catch(function () { flashBtn(btn, "Copy failed"); });
+  }
+
+  $("copy").addEventListener("click", function () {
+    if (ta.value === "" && tb.value === "") return;
+    copyText(plainDiffText(), $("copy")); closeMenu("export");
+  });
+  $("copy-diff").addEventListener("click", function () {
+    var ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
+    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeMenu("export"); return; }
+    copyText(ud, $("copy-diff")); closeMenu("export");
+  });
+  $("copy-md").addEventListener("click", function () {
+    var md = window.ClearDiff.toMarkdown(ta.value, tb.value, opts());
+    if (!md) { stats.textContent = "Nothing to export — the two texts are identical."; closeMenu("export"); return; }
+    copyText(md, $("copy-md")); closeMenu("export");
+  });
+  $("dl-patch").addEventListener("click", function () {
+    var ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
+    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeMenu("export"); return; }
+    var blob = new Blob([ud], { type: "text/x-patch" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "difflens.patch";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    flashBtn($("dl-patch"), "Saved ✓"); closeMenu("export");
+  });
+
+  // ── history（用真实的 DiffLensHistory 助手；稿子里用 localStorage 代替 chrome.storage）
+  var H = window.DiffLensHistory;
+  var historyList = [];
+  try { historyList = JSON.parse(localStorage.getItem("difflens-v2-history") || "[]"); } catch (e) { historyList = []; }
+  function persistHistory() {
+    try { localStorage.setItem("difflens-v2-history", JSON.stringify(historyList)); } catch (e) { /* 配额满，静默 */ }
+  }
+  function relTime(ts) {
+    var s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 60) return "just now";
+    var m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+    var h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
+  }
+  function renderHistList() {
+    var box = $("hist-list");
+    if (!historyList.length) { box.innerHTML = '<div class="histempty">No saved comparisons yet.</div>'; return; }
+    box.innerHTML = historyList.map(function (e) {
+      return '<div class="histrow">' +
+        '<button class="histmain" type="button" data-restore="' + esc(e.id) + '" title="Restore this comparison">' +
+          '<span class="histprev">' + esc(e.preview) + "</span>" +
+          '<span class="histtime">' + esc(relTime(e.ts)) + "</span>" +
+        "</button>" +
+        '<button class="histdel" type="button" data-del="' + esc(e.id) + '" title="Delete" aria-label="Delete saved comparison">✕</button>' +
+      "</div>";
+    }).join("");
+  }
+  $("hist-save").addEventListener("click", function () {
+    var a = ta.value, b = tb.value;
+    if (a === "" && b === "") { stats.textContent = "Nothing to save yet — paste or type some text first."; return; }
+    if (H.tooLarge(a, b)) { stats.textContent = "This comparison is too large to save to history."; return; }
+    historyList = H.add(historyList, {
+      id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6),
+      ts: Date.now(), a: a, b: b, preview: H.preview(a, b)
+    });
+    persistHistory(); renderHistList(); flashBtn($("hist-save"), "Saved ✓");
+  });
+  $("hist-list").addEventListener("click", function (e) {
+    var r = e.target.closest("[data-restore]"), d = e.target.closest("[data-del]");
+    if (r) {
+      var it = historyList.find(function (x) { return x.id === r.dataset.restore; });
+      if (it) { ta.value = it.a; tb.value = it.b; render(); }
+      closeMenu("history");
+    } else if (d) {
+      historyList = H.remove(historyList, d.dataset.del);
+      persistHistory(); renderHistList();
+    }
+  });
+  renderHistList();
+
+  // ── Format JSON：parse → 递归排序键 → 美化
+  function sortKeys(v) {
+    if (Array.isArray(v)) return v.map(sortKeys);
+    if (v && typeof v === "object") {
+      var o = {};
+      Object.keys(v).sort().forEach(function (k) { o[k] = sortKeys(v[k]); });
+      return o;
+    }
+    return v;
+  }
+  function formatPane(el) {
+    var s = el.value.trim();
+    if (!s) return false;
+    try { el.value = JSON.stringify(sortKeys(JSON.parse(s)), null, 2); return true; }
+    catch (e) { return false; }
+  }
+  $("fmt-json").addEventListener("click", function () {
+    var a = formatPane(ta), b = formatPane(tb);
+    render();
+    if (!a && !b) stats.textContent = "No valid JSON to format on either side.";
+    else if (!a || !b) stats.textContent = "Formatted the valid JSON side; the other isn’t valid JSON.";
+  });
+
+  // ── 本地文件：FileReader，5MB 上限，不上传
+  var MAX_FILE_BYTES = 5 * 1024 * 1024;
+  function loadFile(file, which) {
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      stats.textContent = "That file is too large (" + (file.size / 1048576).toFixed(1) +
+        " MB). DiffLens handles up to " + (MAX_FILE_BYTES / 1048576) + " MB locally.";
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () { (which === "a" ? ta : tb).value = String(reader.result); render(); };
+    reader.onerror = function () { stats.textContent = "Couldn’t read that file."; };
+    reader.readAsText(file);
+  }
+  document.querySelectorAll("[data-file]").forEach(function (btn) {
+    btn.addEventListener("click", function () { $("file-" + btn.dataset.file).click(); });
+  });
+  ["a", "b"].forEach(function (w) {
+    var inp = $("file-" + w);
+    inp.addEventListener("change", function (e) { loadFile(e.target.files[0], w); inp.value = ""; });
+    var pane = w === "a" ? ta : tb;
+    pane.addEventListener("dragover", function (e) { e.preventDefault(); pane.classList.add("dragover"); });
+    pane.addEventListener("dragleave", function () { pane.classList.remove("dragover"); });
+    pane.addEventListener("drop", function (e) {
+      e.preventDefault(); pane.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0], w);
+    });
+  });
+  document.querySelectorAll("[data-clear]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      (btn.dataset.clear === "a" ? ta : tb).value = ""; render();
+    });
+  });
+
+  // ── 输入 → 120ms 防抖渲染
+  var t;
+  var schedule = function () { clearTimeout(t); t = setTimeout(render, 120); };
+  [ta, tb].forEach(function (el) { el.addEventListener("input", schedule); });
+
+  // ── 两个输入区滚动联动（守卫标志打断 A→B→A 回环）
+  var syncing = false;
+  function linkScroll(src, dst) {
+    src.addEventListener("scroll", function () {
+      if (syncing) return;
+      syncing = true;
+      dst.scrollTop = src.scrollTop; dst.scrollLeft = src.scrollLeft;
+      requestAnimationFrame(function () { syncing = false; });
+    });
+  }
+  linkScroll(ta, tb); linkScroll(tb, ta);
+
+  [optWs, optCase, optBlank, optChar].forEach(function (el) { el.addEventListener("change", render); });
+  optWrap.addEventListener("change", function () { result.classList.toggle("wrap", optWrap.checked); });
+  optWsShow.addEventListener("change", function () { showWs = optWsShow.checked; render(); });
+  optFold.addEventListener("change", function () { fold = optFold.checked; render(); });
+
+  result.addEventListener("click", function (e) {
+    var b = e.target.closest(".foldbtn");
+    if (!b) return;
+    expandedFolds.add(b.dataset.fold);
+    render();
+  });
+  stats.addEventListener("click", function (e) {
+    if (e.target.closest(".add, .del, .minorc")) { hunkIdx = -1; jump(1); }
+  });
+  document.querySelectorAll("[data-view]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      view = btn.dataset.view;
+      document.querySelectorAll("[data-view]").forEach(function (b) { b.classList.toggle("on", b === btn); });
+      render();
+    });
+  });
+  $("swap").addEventListener("click", function () {
+    var tmp = ta.value; ta.value = tb.value; tb.value = tmp; render();
+  });
+  navPrev.addEventListener("click", function () { jump(-1); });
+  navNext.addEventListener("click", function () { jump(1); });
+  document.addEventListener("keydown", function (e) {
+    if (!e.altKey) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); jump(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); jump(-1); }
+  });
+  document.addEventListener("click", function (e) {
+    ["history", "export"].forEach(function (id) {
+      var d = $(id);
+      if (d && d.open && !d.contains(e.target)) d.open = false;
+    });
+  });
+
+  render();
+})();
+
+</script>

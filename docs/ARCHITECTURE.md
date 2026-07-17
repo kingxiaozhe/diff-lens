@@ -14,11 +14,17 @@ web app": private, prose-friendly, free.
 
 ## Architecture (smallest thing that nails the differentiator)
 
-- **Popup-only, vanilla JS, no build step, no framework.** Keeps it tiny and makes
-  the privacy claim self-evident.
+- **Vanilla JS, no build step, no framework, no dependencies.** Keeps it tiny and
+  makes the privacy claim self-evident — anyone can audit the whole thing.
 - **Permissions: `storage` + `contextMenus` only. No `host_permissions`, no network.**
   The manifest *is* the privacy story — there is no code path that can exfiltrate text.
-  (Smoke test asserts this as a regression guard.)
+  The smoke test enforces this: it asserts the permission set exactly, rejects
+  `host_permissions` / `optional_permissions` / `content_scripts`, and greps every
+  source file for outbound URLs (including CSS `@import` / `url()`, which an
+  attribute-shaped regex would miss).
+  *This guard was added 2026-07-17. Before that, this line claimed it existed while
+  the smoke test contained no such assertion — the invariant was unenforced for the
+  whole v0.1–v0.2 cycle. Don't write "the test guarantees X" without grepping the test.*
 - **No popup — the toolbar icon opens a full browser tab** (`compare.html`).
   `background.js` handles `action.onClicked`, tracking the opened tab id so a
   re-click focuses it instead of piling up tabs (done WITHOUT the `tabs` permission —
@@ -27,10 +33,19 @@ web app": private, prose-friendly, free.
   disappears when I click away" complaint.
 - **An open tab live-updates** when a selection is captured elsewhere: `app.js`
   listens to `chrome.storage.onChanged` and refreshes the panes (skipping its own writes).
-- `compare.html` + `app.js` + `app.css` — the full-page (`body.page`, fluid + tall)
-  two-pane view with live diff and word-level highlights. `diff.js` is the standalone,
-  unit-testable engine. `render()` is wrapped in an error boundary so a pathological
-  input can never leave the UI broken.
+- `compare.html` + `app.js` + `app.css` — the full-page two-pane view with live diff
+  and word-level highlights. `diff.js` is the standalone, unit-testable engine.
+  `render()` is wrapped in an error boundary so a pathological input can never leave
+  the UI broken.
+- **Layout is a five-row grid** (`.app`): utility bar / inputs / options bar / result /
+  status bar. The result gets the full width — an earlier draft put the options in a
+  216px left rail, which cost ~13 characters per side in split view, and horizontal
+  room is the one thing a diff tool shouldn't spend. The options bar owning a full row
+  is what lets all seven toggles stay visible without fighting the brand for space.
+  Stats and difference-navigation live in the status bar (IDE convention), so the
+  result surface has no toolbar above or below it. Every grid item sets an explicit
+  `min-height: 0` — grid's `auto` default lets content burst past `100vh` and drags
+  the whole page into scrolling.
 - `diff.js` — dependency-free engine (LCS over lines with common prefix/suffix trim;
   positional del↔add pairing within a changed block; word-level LCS for intra-line
   highlight). Attaches to `window` so it's unit-testable in Node.
