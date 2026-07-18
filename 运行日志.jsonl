@@ -62,3 +62,4 @@
 {"at": "2026-07-18T09:50:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "pause", "detail": "收口人门:双计数呈人签核(等价 21+6+73 全一致 / 判官变异 3/3)"}
 {"at": "2026-07-18T10:11:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "resume", "detail": "收口人门:人签核(双计数确认+撤禁令授权)"}
 {"at": "2026-07-18T10:11:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "done", "detail": "重构闭环:提交入库,档案/凭证/明细三层齐,禁令已撤"}
+{"at": "2026-07-18T10:28:49+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "task_done", "detail": "波及物补账:README/ARCHITECTURE 结构描述同步(收口遗漏,v0.9.38 波及物核对条款首次执行)"}

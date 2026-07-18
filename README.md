@@ -80,6 +80,9 @@ drafts, specs, screenshots and tests — none of which the extension runs.
   without it the script exits 2 rather than failing. The two unit suites stay
   dependency-free and must pass regardless.
 
-See `docs/ARCHITECTURE.md` for design decisions and known limitations.
+Code layout: `diff.js` (engine) · `history.js` (history model) · five `ui-*.js`
+modules (render / nav / export / history UI / file loading) · `app.js` (orchestration
+only — wiring, state, bindings). See `docs/ARCHITECTURE.md` for design decisions
+and known limitations.
 
 > Name is provisional. 100% local — your text never leaves your browser.

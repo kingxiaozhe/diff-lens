@@ -35,6 +35,15 @@ web app": private, prose-friendly, free.
   listens to `chrome.storage.onChanged` and refreshes the panes (skipping its own writes).
 - `compare.html` + `app.js` + `app.css` — the full-page two-pane view with live diff
   and word-level highlights. `diff.js` is the standalone, unit-testable engine.
+  Since the 2026-07-18 refactor, `app.js` (269 lines) is a pure orchestration layer:
+  DOM refs, state, event bindings, and module wiring. The UI logic lives in five
+  single-responsibility modules loaded before it (bare-factory namespaces, no
+  cross-module calls — everything passes through app.js):
+  `ui-render.js` (pure HTML builders, `DiffLensRender`), `ui-nav.js` (hunk index +
+  pip rail, `DiffLensNav`), `ui-export.js` (copy/download, `DiffLensExport`),
+  `ui-history.js` (saved-comparisons UI, `DiffLensHistUI`), `ui-file.js`
+  (file loading + Format JSON, `DiffLensFile`). Rationale, rules, and byte-level
+  equivalence evidence: `refactors/app-js-split/`.
   `render()` is wrapped in an error boundary so a pathological input can never leave
   the UI broken.
 - **Layout is a five-row grid** (`.app`): utility bar / inputs / options bar / result /
