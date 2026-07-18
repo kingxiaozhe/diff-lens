@@ -54,7 +54,7 @@ default and changes are highlighted down to the word.
 
 ## Package it for the store
 
-`node package.mjs` → `difflens-<version>-upload.zip` (11 files, ~29 KB).
+`node package.mjs` → `difflens-<version>-upload.zip` (16 files, ~39 KB).
 
 The zip is **derived, not curated**: it starts at `manifest.json` and takes the
 closure of every local file it and `compare.html` reference. Wire a new script
