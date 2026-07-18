@@ -1,0 +1,6 @@
+{"at": "2026-07-18T09:32:44+08:00", "file": "ui-render.js", "agent": "cm-frontend-agent", "model": "inherit", "rulebook_rev": "v2", "diff_pass": "纯Node等价6组逐字节", "todos": 0, "confidence": "high", "mount": "直挂DiffLensRender"}
+{"at": "2026-07-18T09:32:44+08:00", "file": "ui-nav.js", "agent": "cm-frontend-agent", "model": "inherit", "rulebook_rev": "v2", "diff_pass": "四函数逐字+薄封装静态论证", "todos": 0, "confidence": "high", "mount": "{init}对象(待v3裁决)"}
+{"at": "2026-07-18T09:32:44+08:00", "file": "ui-export.js", "agent": "cm-frontend-agent", "model": "inherit", "rulebook_rev": "v2", "diff_pass": "L239-291逐字+vm加载", "todos": 0, "confidence": "high", "mount": "裸工厂(待v3裁决)"}
+{"at": "2026-07-18T09:32:44+08:00", "file": "ui-history.js", "agent": "cm-frontend-agent", "model": "inherit", "rulebook_rev": "v2", "diff_pass": "固定时钟15副作用逐字节", "todos": 0, "confidence": "high", "mount": "裸工厂(待v3裁决)"}
+{"at": "2026-07-18T09:32:44+08:00", "file": "ui-file.js", "agent": "cm-frontend-agent", "model": "inherit", "rulebook_rev": "v2", "diff_pass": "假ctx7组断言", "todos": 0, "confidence": "high", "mount": "{init}对象(待v3裁决)"}
+{"at": "2026-07-18T09:34:22+08:00", "file": "ui-nav.js+ui-file.js", "agent": "orchestrator", "rulebook_rev": "v3", "action": "挂载行按v3裸工厂规范化重生成(非手补:规则驱动统一变换)"}

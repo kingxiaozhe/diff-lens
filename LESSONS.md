@@ -20,3 +20,11 @@
 ## 2026-07-18 — fix / ignoreBlankLines 导出补丁不可应用
 - [已结构化] 导出物(补丁)必须以"可应用"为准:忽略类选项只影响差异判定,不得改变补丁体的行完整性——防线: tests/unified-blank-test.mjs 的 patchAppliesTo 校验器(含 hunk 计数验证)
 - [仅记忆] 复现"补丁类"缺陷要选严格裁判:GNU patch 的 fuzz 容错会把坏补丁蒙混过关,git apply --check 才是无 fuzz 的硬证据
+
+## 2026-07-18 — refactor / app.js 拆分
+- [已结构化] 行为保持重构的判官三件套可复用:金样采集(golden-capture.mjs)+浏览器探针(equiv-probe.mjs)+变异重种——防线在 refactors/app-js-split/
+- [仅记忆] 机械规范化变换(挂载行统一)是上下文盲的,必须跟完整判官链再走一遍——实证:root 绑定缺失,站5拦截
+- [仅记忆] 规则涉及"形态"必须附可拷贝骨架代码,公式必有两读(实证:批内 2:2 分裂)
+
+## 待触发备忘
+- [挂起] smoke 补 export/file 实操永久断言(复制三通道/下载/拖放/FileReader/5MB/Format JSON)→ 下次动这两模块或专项测试任务时认领(来源 refactor/app-js-split r2)

@@ -1,4 +1,8 @@
-// ClearDiff popup/page — wires UI to the local diff engine. No network calls.
+// ClearDiff popup/page — orchestration layer: caches DOM refs, owns UI state, and
+// wires the ui-* modules to the local diff engine. No network calls. Rendering, hunk
+// navigation, export, history UI, and file loading live in ui-render.js / ui-nav.js /
+// ui-export.js / ui-history.js / ui-file.js (split per refactors/app-js-split/RULEBOOK.md;
+// modules never talk to each other — every cross-module value passes through here).
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -12,7 +16,6 @@
   let view = "unified";
   let showWs = false;
   let fold = false;
-  let hunks = [], hunkIdx = -1;
   // Which collapsed bands the user has manually expanded; keyed by stable fold key.
   // Cleared whenever the compared text changes (keys would no longer match).
   const FOLD_CONTEXT = 3;
@@ -21,29 +24,6 @@
 
   const hasChrome = typeof chrome !== "undefined" && chrome.storage && chrome.storage.local;
 
-  function esc(s) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-  // Escape + (optionally) reveal whitespace as faint glyphs — BC-style.
-  function fmt(s) {
-    let h = esc(s);
-    if (showWs) {
-      h = h.replace(/\t/g, '<span class="ws">→</span>').replace(/ /g, '<span class="ws">·</span>');
-    }
-    return h;
-  }
-  function renderWords(words) {
-    return words.map((w) => {
-      const t = fmt(w.text);
-      if (w.type === "del") return "<del>" + t + "</del>";
-      if (w.type === "add") return "<ins>" + t + "</ins>";
-      return t;
-    }).join("");
-  }
-  // Inline badge marking a moved line and where its partner lives.
-  function moveTag(dir, n) {
-    return ' <span class="movetag" title="This line was moved, not added or removed">↕ moved ' + dir + " line " + n + "</span>";
-  }
   function opts() {
     return {
       ignoreWhitespace: optWs.checked,
@@ -53,78 +33,20 @@
     };
   }
 
-  // 两个 span 之间不留字面空格——.num 用 flex gap 控距，字面空格会额外撑开一格。
-  function numCell(a, b) {
-    return '<div class="num"><span>' + (a == null ? "" : a) + '</span><span>' + (b == null ? "" : b) + "</span></div>";
-  }
-  function urow(cls, sign, aNum, bNum, inner, attrs) {
-    return '<div class="row ' + cls + '"' + (attrs || "") + '>' + numCell(aNum, bNum) + '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
-  }
-  // pip 轨道消费的视图无关元数据，盖在每个 hunk 的首行上。轨道只读 dataset，
-  // 不读各视图的 DOM 细节（split 的类型类在子节点上，按 classList 读会拿不到）。
-  function hmeta(type, line) {
-    return ' data-htype="' + type + '" data-hline="' + (line == null ? "" : line) + '"';
-  }
-  // Single-column rows shared by Unified and Inline — the ONLY difference is how a
-  // CHANGE renders: Unified shows two rows (− old / + new); Inline shows one row with
-  // the original text and the edits marked in place (strike-through + insert).
-  // A collapsed band of unchanged lines — full-width, click to expand.
-  function foldRowHtml(r) {
-    return '<div class="row fold"><button class="foldbtn" type="button" data-fold="' + esc(r.key) +
-      '" title="Show the hidden lines">⋯ ' + r.count + " unchanged lines · expand ⋯</button></div>";
-  }
-  function renderColumn(out, inlineChange) {
-    const html = []; let prevImp = false;
-    for (const r of out.rows) {
-      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; continue; }
-      const imp = r.type === "del" || r.type === "add" || r.type === "change";
-      const hs = imp && !prevImp ? " hstart" : "";
-      if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
-      else if (r.type === "minor") html.push(urow("minor", "≈", r.aNum, r.bNum, renderWords(inlineChange ? r.words : r.bWords)));
-      else if (r.type === "del") html.push(urow("del" + hs + (r.moved ? " moved" : ""), "−", r.aNum, null, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : ""), hs ? hmeta("del", r.aNum) : ""));
-      else if (r.type === "add") html.push(urow("add" + hs + (r.moved ? " moved" : ""), "+", null, r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""), hs ? hmeta("add", r.bNum) : ""));
-      else if (r.type === "change") {
-        if (inlineChange) {
-          html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words), hs ? hmeta("change", r.aNum) : ""));
-        } else {
-          html.push(urow("change" + hs, "−", r.aNum, null, renderWords(r.aWords), hs ? hmeta("change", r.aNum) : ""));
-          html.push(urow("change", "+", null, r.bNum, renderWords(r.bWords)));
-        }
-      }
-      prevImp = imp;
-    }
-    return html.join("");
-  }
-  function renderUnified(out) { return renderColumn(out, false); }
-  function renderInline(out) { return renderColumn(out, true); }
-  function scol(cls, num, inner) {
-    return '<div class="scol ' + cls + '"><div class="snum">' + (num == null ? "" : num) + '</div><div class="stxt">' + inner + "</div></div>";
-  }
-  function renderSplit(out) {
-    const html = []; let prevImp = false;
-    for (const r of out.rows) {
-      if (r.type === "fold") { html.push(foldRowHtml(r)); prevImp = false; continue; }
-      const imp = r.type === "del" || r.type === "add" || r.type === "change";
-      const hs = imp && !prevImp ? " hstart" : "";
-      // 右栏必须带 class "b" —— .scol.b 是两栏之间的分隔竖线。
-      // （此前一直漏加，导致 app.css 的 .scol.b 规则从未生效、split 视图无分栏线。）
-      let left, right;
-      if (r.type === "equal") {
-        left = scol("equal", r.aNum, fmt(r.text)); right = scol("equal b", r.bNum, fmt(r.text));
-      } else if (r.type === "minor") {
-        left = scol("minor", r.aNum, renderWords(r.aWords)); right = scol("minor b", r.bNum, renderWords(r.bWords));
-      } else if (r.type === "del") {
-        left = scol("del" + (r.moved ? " moved" : ""), r.aNum, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")); right = scol("blank b", null, "");
-      } else if (r.type === "add") {
-        left = scol("blank", null, ""); right = scol("add b" + (r.moved ? " moved" : ""), r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""));
-      } else { // change
-        left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg b", r.bNum, renderWords(r.bWords));
-      }
-      html.push('<div class="srow' + hs + '"' + (hs ? hmeta(r.type, r.type === "add" ? r.bNum : r.aNum) : "") + '>' + left + right + "</div>");
-      prevImp = imp;
-    }
-    return html.join("");
-  }
+  // --- module wiring (RULEBOOK R1: cross-module sharing passes only through this layer) ---
+  const R = window.DiffLensRender;
+  const nav = window.DiffLensNav({ result, pipRail, navPrev, navNext, navCount });
+  const exp = window.DiffLensExport({ ta, tb, stats, opts });
+  let historyList = [];
+  function persistHistory() { if (hasChrome) chrome.storage.local.set({ history: historyList }); }
+  const histUI = window.DiffLensHistUI({
+    ta, tb, stats,
+    histList: $("hist-list"), histSave: $("hist-save"), histMenu: $("history"),
+    esc: R.esc, hist: window.DiffLensHistory,
+    getHistoryList: () => historyList, setHistoryList: (l) => { historyList = l; },
+    persistHistory, flashBtn: exp.flashBtn, render, persist,
+  });
+  const fileUI = window.DiffLensFile({ ta, tb, stats, render, persist });
 
   // Error boundary: a pathological input must never leave the UI broken or throw
   // uncaught — show a friendly message and keep the tool usable.
@@ -133,9 +55,9 @@
       renderDiff();
     } catch (e) {
       result.innerHTML = '<div class="placeholder"><span class="big">Couldn’t compare this input' +
-        (e && e.message ? " (" + esc(String(e.message)) + ")" : "") + '.</span><span>Try smaller or simpler text.</span></div>';
+        (e && e.message ? " (" + R.esc(String(e.message)) + ")" : "") + '.</span><span>Try smaller or simpler text.</span></div>';
       stats.textContent = "Comparison error";
-      hunks = []; hunkIdx = -1; updateNav();
+      nav.reset();
     }
   }
   function renderDiff() {
@@ -146,7 +68,7 @@
       result.innerHTML = '<div class="placeholder"><span class="big">Type or paste text in both boxes to compare.</span>' +
         '<span>Nothing you paste here is uploaded — the comparison runs in this tab.</span></div>';
       stats.textContent = "Type or paste text in both boxes to compare.";
-      indexHunks();
+      nav.indexHunks();
       return;
     }
     const out = window.ClearDiff.compare(a, b, opts());
@@ -162,7 +84,9 @@
         }
         toRender = { rows: folded };
       }
-      result.innerHTML = view === "split" ? renderSplit(toRender) : view === "inline" ? renderInline(toRender) : renderUnified(toRender);
+      result.innerHTML = view === "split" ? R.renderSplit(toRender, { showWs })
+        : view === "inline" ? R.renderInline(toRender, { showWs })
+        : R.renderUnified(toRender, { showWs });
     }
     const minorTxt = out.stats.minor ? ' · <span class="minorc">≈' + out.stats.minor + " minor</span>" : "";
     const movedTxt = out.stats.moved ? ' · <span class="movedc">↕' + out.stats.moved + " moved</span>" : "";
@@ -171,166 +95,8 @@
       '<span class="add">+' + out.stats.added + " added</span> · " +
       '<span class="del">−' + out.stats.removed + " removed</span>" + minorTxt + movedTxt +
       " · A: " + out.stats.aLines + " lines, B: " + out.stats.bLines + " lines";
-    indexHunks();
+    nav.indexHunks();
   }
-
-  // --- difference navigation (BC-style next/prev) ---
-  function indexHunks() {
-    hunks = [].slice.call(result.querySelectorAll(".hstart"));
-    hunkIdx = -1;
-    updateNav();
-    renderPips();
-  }
-  function updateNav() {
-    if (!navPrev) return;
-    const n = hunks.length;
-    navPrev.disabled = n === 0; navNext.disabled = n === 0;
-    navCount.textContent = n === 0 ? "—" : (hunkIdx < 0 ? (n + (n === 1 ? " diff" : " diffs")) : (hunkIdx + 1) + " / " + n);
-    // 显隐挂在这里：hunks 状态的唯一汇聚点，错误态（render 边界置空 hunks）也会路过。
-    if (pipRail) pipRail.classList.toggle("hidden", n === 0);
-  }
-  // F-044 改动色标：轨道上每个 pip 对应一个 hunk，位置按文档相对高度铺排。
-  // 类型与行号读 hunk 首行的 data-htype/data-hline（视图无关），不碰用户文本。
-  function renderPips() {
-    if (!pipRail) return;
-    if (!hunks.length) { pipRail.innerHTML = ""; return; }
-    // 先把几何一次读完，再开始写 DOM——读写交错会让每次迭代都强制同步布局，
-    // 大 diff 下 wrap/resize 一次就是一串 reflow。
-    const total = result.scrollHeight || 1;
-    const tops = hunks.map((h) => ((h.offsetTop / total) * 100).toFixed(2) + "%");
-    // innerHTML 重建会销毁真实键盘焦点：记下焦点停在哪个 pip，重建后还给同一序号。
-    const ae = document.activeElement;
-    const focusIdx = ae && pipRail.contains(ae) && ae.dataset && ae.dataset.pip != null ? Number(ae.dataset.pip) : -1;
-    const NAME = { add: "added", del: "removed", change: "changed" };
-    const html = [];
-    for (let i = 0; i < hunks.length; i++) {
-      const type = hunks[i].dataset.htype || "change";
-      const line = hunks[i].dataset.hline || "";
-      const label = (NAME[type] || "changed") + (line ? " · line " + line : "");
-      html.push('<button type="button" class="pip ' + (NAME[type] ? type : "change") +
-        '" data-pip="' + i + '" title="' + label + '" aria-label="Jump to ' + label + '"></button>');
-    }
-    pipRail.innerHTML = html.join("");
-    const kids = pipRail.children;
-    for (let i = 0; i < kids.length; i++) {
-      // 几何是数据不是样式：仅 top 由 JS 写入，颜色与形态全部留在 app.css
-      //（specs 技术决策 1 对「禁内联 style」的显式豁免，范围仅此一个属性）。
-      kids[i].style.top = tops[i];
-    }
-    // 幂等复原当前态：任何原因重建轨道（wrap 切换、resize）后不丢 .current。
-    if (hunkIdx >= 0 && kids[hunkIdx]) kids[hunkIdx].classList.add("current");
-    if (focusIdx >= 0 && kids[focusIdx]) kids[focusIdx].focus({ preventScroll: true });
-  }
-  function jump(dir) {
-    if (!hunks.length) return;
-    if (hunkIdx < 0) hunkIdx = dir > 0 ? 0 : hunks.length - 1;
-    else hunkIdx = (hunkIdx + dir + hunks.length) % hunks.length;
-    hunks.forEach((h) => h.classList.remove("jumped"));
-    const el = hunks[hunkIdx];
-    el.classList.add("jumped");
-    el.scrollIntoView({ block: "center" });
-    if (pipRail) {
-      const ps = pipRail.children;
-      for (let i = 0; i < ps.length; i++) ps[i].classList.toggle("current", i === hunkIdx);
-    }
-    updateNav();
-  }
-
-  // Plain-text diff (the legacy "Copy result" format).
-  function plainDiffText() {
-    const out = window.ClearDiff.compare(ta.value, tb.value, opts());
-    return out.rows.map((r) => {
-      if (r.type === "equal") return "  " + r.text;
-      if (r.type === "minor") return "~ " + r.bText;
-      if (r.type === "del") return "- " + r.text;
-      if (r.type === "add") return "+ " + r.text;
-      if (r.type === "change") return "- " + r.aWords.map((w) => w.text).join("") + "\n+ " + r.bWords.map((w) => w.text).join("");
-      return "";
-    }).join("\n");
-  }
-
-  function flashBtn(btn, label) {
-    if (!btn) return;
-    const old = btn.textContent;
-    btn.textContent = label; setTimeout(() => (btn.textContent = old), 1200);
-  }
-  function closeExport() { const d = $("export"); if (d) d.open = false; }
-
-  function copyText(text, btn, okLabel) {
-    if (!text) return;
-    navigator.clipboard.writeText(text)
-      .then(() => flashBtn(btn, okLabel || "Copied ✓"))
-      .catch(() => flashBtn(btn, "Copy failed"));
-  }
-  function copyResult() {
-    if (ta.value === "" && tb.value === "") return;
-    copyText(plainDiffText(), $("copy"));
-    closeExport();
-  }
-  function copyUnified() {
-    const ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
-    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
-    copyText(ud, $("copy-diff")); closeExport();
-  }
-  function copyMarkdown() {
-    const md = window.ClearDiff.toMarkdown(ta.value, tb.value, opts());
-    if (!md) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
-    copyText(md, $("copy-md")); closeExport();
-  }
-  // Download the unified diff as a .patch file — a local Blob, no network.
-  function downloadPatch() {
-    const ud = window.ClearDiff.toUnifiedDiff(ta.value, tb.value, opts());
-    if (!ud) { stats.textContent = "Nothing to export — the two texts are identical."; closeExport(); return; }
-    const blob = new Blob([ud], { type: "text/x-patch" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "difflens.patch";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    flashBtn($("dl-patch"), "Saved ✓"); closeExport();
-  }
-
-  // --- comparison history (saved snapshots, local only) ------------------------
-  const H = window.DiffLensHistory;
-  let historyList = [];
-  function persistHistory() { if (hasChrome) chrome.storage.local.set({ history: historyList }); }
-  function relTime(ts) {
-    const s = Math.max(0, (Date.now() - ts) / 1000);
-    if (s < 60) return "just now";
-    const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
-    const h = Math.floor(m / 60); if (h < 24) return h + "h ago";
-    return Math.floor(h / 24) + "d ago";
-  }
-  function renderHistList() {
-    const box = $("hist-list");
-    if (!box) return;
-    if (!historyList.length) { box.innerHTML = '<div class="hist-empty">No saved comparisons yet.</div>'; return; }
-    box.innerHTML = historyList.map((e) =>
-      '<div class="hist-item">' +
-        '<button class="hist-restore" type="button" data-restore="' + esc(e.id) + '" title="Restore this comparison">' +
-          '<span class="hist-prev">' + esc(e.preview) + "</span>" +
-          '<span class="hist-time">' + esc(relTime(e.ts)) + "</span>" +
-        "</button>" +
-        '<button class="hist-del" type="button" data-del="' + esc(e.id) + '" title="Delete" aria-label="Delete saved comparison">✕</button>' +
-      "</div>"
-    ).join("");
-  }
-  function saveCurrent() {
-    const a = ta.value, b = tb.value;
-    if (a === "" && b === "") { stats.textContent = "Nothing to save yet — paste or type some text first."; return; }
-    if (H.tooLarge(a, b)) { stats.textContent = "This comparison is too large to save to history."; return; }
-    const entry = { id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6), ts: Date.now(), a: a, b: b, preview: H.preview(a, b) };
-    historyList = H.add(historyList, entry);
-    persistHistory(); renderHistList();
-    flashBtn($("hist-save"), "Saved ✓");
-  }
-  function restoreHist(id) {
-    const e = historyList.find((x) => x.id === id);
-    if (!e) return;
-    ta.value = e.a; tb.value = e.b; render(); persist();
-    const d = $("history"); if (d) d.open = false;
-  }
-  function delHist(id) { historyList = H.remove(historyList, id); persistHistory(); renderHistList(); }
 
   let t;
   const schedule = () => { clearTimeout(t); t = setTimeout(render, 120); };
@@ -352,12 +118,12 @@
   linkScroll(tb, ta);
   [optWs, optCase, optBlank, optChar].forEach((el) => el.addEventListener("change", () => { render(); persistOpts(); }));
   // wrap 只切 class 不重 render，但换行改变每行 offsetTop —— pip 位置必须跟着重算。
-  optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); renderPips(); persistOpts(); });
+  optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); nav.renderPips(); persistOpts(); });
   if (optWsShow) optWsShow.addEventListener("change", () => { showWs = optWsShow.checked; render(); persistOpts(); });
   // 窗口宽度变化在 wrap 下同样改写几何。只重定位（renderPips），不重算 diff——
   // 与输入的 schedule() 防抖分开：resize 不该触发引擎重跑。
   let rt;
-  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderPips, 120); });
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(nav.renderPips, 120); });
   if (optFold) optFold.addEventListener("change", () => { fold = optFold.checked; render(); persistOpts(); });
   // Expand a collapsed band when its placeholder is clicked.
   result.addEventListener("click", (e) => {
@@ -369,11 +135,11 @@
   $("swap").addEventListener("click", () => {
     const tmp = ta.value; ta.value = tb.value; tb.value = tmp; render(); persist();
   });
-  $("copy").addEventListener("click", copyResult);
-  { const e = $("copy-diff"); if (e) e.addEventListener("click", copyUnified); }
-  { const e = $("copy-md"); if (e) e.addEventListener("click", copyMarkdown); }
-  { const e = $("dl-patch"); if (e) e.addEventListener("click", downloadPatch); }
-  { const e = $("hist-save"); if (e) e.addEventListener("click", saveCurrent); }
+  $("copy").addEventListener("click", exp.copyResult);
+  { const e = $("copy-diff"); if (e) e.addEventListener("click", exp.copyUnified); }
+  { const e = $("copy-md"); if (e) e.addEventListener("click", exp.copyMarkdown); }
+  { const e = $("dl-patch"); if (e) e.addEventListener("click", exp.downloadPatch); }
+  { const e = $("hist-save"); if (e) e.addEventListener("click", histUI.saveCurrent); }
   { const box = $("hist-list"); if (box) box.addEventListener("click", (e) => {
       const r = e.target.closest("[data-restore]");
       const d = e.target.closest("[data-del]");
@@ -382,15 +148,14 @@
       // below detaches the clicked node, which would make its contains() check fail
       // and spuriously close the menu. (Delete keeps the menu open to remove several.)
       e.stopPropagation();
-      if (r) restoreHist(r.dataset.restore);
-      else delHist(d.dataset.del);
+      if (r) histUI.restoreHist(r.dataset.restore);
+      else histUI.delHist(d.dataset.del);
     }); }
   // Clickable stats: clicking the +added / −removed / ≈minor counts jumps to the
   // first difference so the numbers double as navigation.
   stats.addEventListener("click", (e) => {
     if (!e.target.closest(".add, .del, .minorc")) return;
-    if (!hunks.length) return;
-    hunkIdx = -1; jump(1);
+    nav.jumpTo(0);
   });
   // Close any open dropdown menu on an outside click. (Clicking one summary lands
   // outside the other, so this also keeps them mutually exclusive.)
@@ -400,14 +165,13 @@
       if (d && d.open && !d.contains(e.target)) d.open = false;
     });
   });
-  if (navPrev) navPrev.addEventListener("click", () => jump(-1));
-  if (navNext) navNext.addEventListener("click", () => jump(1));
-  // pip 点击跳转：委托一个监听，复用 stats 点击的既有模式（hunkIdx = i-1 再 jump(1)）。
+  if (navPrev) navPrev.addEventListener("click", () => nav.jump(-1));
+  if (navNext) navNext.addEventListener("click", () => nav.jump(1));
+  // pip 点击跳转：委托一个监听，复用 stats 点击的既有模式（内部 hunkIdx = i-1 再 jump(1)）。
   if (pipRail) pipRail.addEventListener("click", (e) => {
     const p = e.target.closest("[data-pip]");
-    if (!p || !hunks.length) return;
-    hunkIdx = Number(p.dataset.pip) - 1;
-    jump(1);
+    if (!p) return;
+    nav.jumpTo(Number(p.dataset.pip));
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -416,8 +180,8 @@
       if (closed) return;
     }
     if (!e.altKey) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); jump(1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); jump(-1); }
+    if (e.key === "ArrowDown") { e.preventDefault(); nav.jump(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); nav.jump(-1); }
   });
   document.querySelectorAll("[data-view]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -433,61 +197,25 @@
     });
   });
 
-  // --- local file loading (drag-drop or "open file…") — 100% local via FileReader ---
-  const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB: beyond this, load + render would lag
-  const paneEl = (which) => (which === "a" ? ta : tb);
-  function loadFile(file, which) {
-    if (!file) return;
-    if (file.size > MAX_FILE_BYTES) {
-      stats.textContent = "That file is too large (" + (file.size / 1048576).toFixed(1) +
-        " MB). DiffLens handles up to " + (MAX_FILE_BYTES / 1048576) + " MB locally.";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => { paneEl(which).value = String(reader.result || ""); render(); persist(); };
-    reader.onerror = () => { stats.textContent = "Couldn’t read that file."; };
-    reader.readAsText(file);
-  }
+  // --- local file loading (drag-drop or "open file…") — wiring only; logic in ui-file ---
   document.querySelectorAll("[data-file]").forEach((btn) => {
     btn.addEventListener("click", () => { const inp = $("file-" + btn.dataset.file); if (inp) inp.click(); });
   });
   ["a", "b"].forEach((which) => {
     const inp = $("file-" + which);
-    if (inp) inp.addEventListener("change", (e) => { loadFile(e.target.files[0], which); inp.value = ""; });
-    const el = paneEl(which);
+    if (inp) inp.addEventListener("change", (e) => { fileUI.loadFile(e.target.files[0], which); inp.value = ""; });
+    const el = fileUI.paneEl(which);
     el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("dragover"); });
     el.addEventListener("dragleave", () => el.classList.remove("dragover"));
     el.addEventListener("drop", (e) => {
       e.preventDefault(); el.classList.remove("dragover");
       const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) loadFile(f, which);
+      if (f) fileUI.loadFile(f, which);
     });
   });
-
-  // --- "Format JSON": structural compare via parse → sort keys → pretty-print ---
-  // Sorting keys makes key-order differences vanish; pretty-printing makes whitespace/
-  // minification differences vanish — so two structurally-equal JSONs become identical.
-  // NOTE: uses native JSON, so integers beyond 2^53 may be reformatted with precision
-  // loss (both sides equally). Big-int-faithful mode is a future option (cf. JSON Keeper).
-  function sortKeys(v) {
-    if (Array.isArray(v)) return v.map(sortKeys);
-    if (v && typeof v === "object") {
-      const out = {};
-      for (const k of Object.keys(v).sort()) out[k] = sortKeys(v[k]);
-      return out;
-    }
-    return v;
-  }
-  function formatPane(which) {
-    const el = paneEl(which);
-    const raw = el.value.trim();
-    if (!raw) return false;
-    try { el.value = JSON.stringify(sortKeys(JSON.parse(raw)), null, 2); return true; }
-    catch { return false; }
-  }
   const fmtBtn = $("fmt-json");
   if (fmtBtn) fmtBtn.addEventListener("click", () => {
-    const a = formatPane("a"), b = formatPane("b");
+    const a = fileUI.formatPane("a"), b = fileUI.formatPane("b");
     render(); persist();
     if (!a && !b) stats.textContent = "No valid JSON to format on either side.";
     else if (!a || !b) stats.textContent = "Formatted the valid JSON side; the other isn’t valid JSON.";
@@ -506,7 +234,7 @@
     });
   }
   function boot() {
-    if (!hasChrome) { render(); renderHistList(); return; }
+    if (!hasChrome) { render(); histUI.renderHistList(); return; }
     chrome.storage.local.get(
       ["textA", "textB", "ignoreWhitespace", "ignoreCase", "ignoreBlankLines", "charLevel", "showWhitespace", "wordWrap", "view", "foldUnchanged", "history"],
       (s) => {
@@ -526,7 +254,7 @@
         if (Array.isArray(s.history)) historyList = s.history;
         if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
         render();
-        renderHistList();
+        histUI.renderHistList();
       }
     );
     chrome.storage.onChanged.addListener((changes, area) => {

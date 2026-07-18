@@ -49,3 +49,16 @@
 {"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "task_done", "detail": "红转绿,141项全绿,git apply真实裁判通过"}
 {"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "done", "detail": "档案/METRICS/LESSONS落盘,提交入库"}
 {"at": "2026-07-18T09:12:43+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "node_enter", "detail": "G0可行性:侦察app.js结构与动机指标"}
+{"at": "2026-07-18T09:15:25+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "resume", "detail": "G0签核:人批准批量道,预算~2h已确认"}
+{"at": "2026-07-18T09:15:25+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "node_enter", "detail": "G0.5判官自验证:基线+三变异"}
+{"at": "2026-07-18T09:18:38+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "node_enter", "detail": "判官自验证通过(3/3变异抓红),进站1规则手册"}
+{"at": "2026-07-18T09:25:41+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "decision", "detail": "bakeoff裁决:A/B在导出面上无规则自发趋同(强信号);命名空间分叉判规则错误(B的项目先例论证胜);6条修订排队待人批"}
+{"at": "2026-07-18T09:27:32+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "resume", "detail": "站2人门:v2定稿签核+禁令安装授权"}
+{"at": "2026-07-18T09:27:32+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "node_enter", "detail": "站3批量执行:5模块扇出,rulebook_rev=v2"}
+{"at": "2026-07-18T09:32:44+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "task_done", "detail": "站3批次完成:5/5产出,零TODO全high,差分自检全过;R1挂载形态2:2分裂坐实,v3修订排队人批"}
+{"at": "2026-07-18T09:34:22+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "decision", "detail": "v3裁决:裸工厂定形+骨架代码入册;nav/file挂载行规范化;引擎只读引用合法化"}
+{"at": "2026-07-18T09:50:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "task_done", "detail": "站4机械裁决+站5等价:金样21/21+探针6/6+smoke73+变异3/3;站5拦截1次(规范化变换root缺绑定)"}
+{"at": "2026-07-18T09:50:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "review", "detail": "Codex主通道2轮:r1零阻塞4采纳,r2抓半修与转交不严,探针闭合;凭证r1/r2已落"}
+{"at": "2026-07-18T09:50:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "pause", "detail": "收口人门:双计数呈人签核(等价 21+6+73 全一致 / 判官变异 3/3)"}
+{"at": "2026-07-18T10:11:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "resume", "detail": "收口人门:人签核(双计数确认+撤禁令授权)"}
+{"at": "2026-07-18T10:11:45+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "done", "detail": "重构闭环:提交入库,档案/凭证/明细三层齐,禁令已撤"}

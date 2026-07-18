@@ -60,7 +60,7 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.error("✗ " + m); 
   // Protocol-relative only where a URL can actually sit — after a quote or `url(`.
   // A bare /\/\// matches every trailing comment in the file.
   const NET = /https?:\/\/|@import|["'(]\s*\/\/[a-z0-9-]/i;
-  for (const f of ["compare.html", "app.css", "app.js", "diff.js", "history.js", "background.js"]) {
+  for (const f of ["compare.html", "app.css", "app.js", "diff.js", "history.js", "background.js", "ui-render.js", "ui-nav.js", "ui-export.js", "ui-history.js", "ui-file.js"]) {
     ok(!NET.test(strip(readFileSync(join(here, "..", f), "utf8"))), f + " contains no external URL");
   }
 }
