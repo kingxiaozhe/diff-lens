@@ -8,6 +8,7 @@
   const optFold = $("opt-fold");
   const result = $("result"), stats = $("stats");
   const navPrev = $("nav-prev"), navNext = $("nav-next"), navCount = $("nav-count");
+  const pipRail = $("pip-rail");
   let view = "unified";
   let showWs = false;
   let fold = false;
@@ -56,8 +57,13 @@
   function numCell(a, b) {
     return '<div class="num"><span>' + (a == null ? "" : a) + '</span><span>' + (b == null ? "" : b) + "</span></div>";
   }
-  function urow(cls, sign, aNum, bNum, inner) {
-    return '<div class="row ' + cls + '">' + numCell(aNum, bNum) + '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
+  function urow(cls, sign, aNum, bNum, inner, attrs) {
+    return '<div class="row ' + cls + '"' + (attrs || "") + '>' + numCell(aNum, bNum) + '<div class="sign">' + sign + '</div><div class="txt">' + inner + "</div></div>";
+  }
+  // pip 轨道消费的视图无关元数据，盖在每个 hunk 的首行上。轨道只读 dataset，
+  // 不读各视图的 DOM 细节（split 的类型类在子节点上，按 classList 读会拿不到）。
+  function hmeta(type, line) {
+    return ' data-htype="' + type + '" data-hline="' + (line == null ? "" : line) + '"';
   }
   // Single-column rows shared by Unified and Inline — the ONLY difference is how a
   // CHANGE renders: Unified shows two rows (− old / + new); Inline shows one row with
@@ -75,13 +81,13 @@
       const hs = imp && !prevImp ? " hstart" : "";
       if (r.type === "equal") html.push(urow("equal", "", r.aNum, r.bNum, fmt(r.text)));
       else if (r.type === "minor") html.push(urow("minor", "≈", r.aNum, r.bNum, renderWords(inlineChange ? r.words : r.bWords)));
-      else if (r.type === "del") html.push(urow("del" + hs + (r.moved ? " moved" : ""), "−", r.aNum, null, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : "")));
-      else if (r.type === "add") html.push(urow("add" + hs + (r.moved ? " moved" : ""), "+", null, r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : "")));
+      else if (r.type === "del") html.push(urow("del" + hs + (r.moved ? " moved" : ""), "−", r.aNum, null, fmt(r.text) + (r.moved ? moveTag("to", r.movePartnerNum) : ""), hs ? hmeta("del", r.aNum) : ""));
+      else if (r.type === "add") html.push(urow("add" + hs + (r.moved ? " moved" : ""), "+", null, r.bNum, fmt(r.text) + (r.moved ? moveTag("from", r.movePartnerNum) : ""), hs ? hmeta("add", r.bNum) : ""));
       else if (r.type === "change") {
         if (inlineChange) {
-          html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words)));
+          html.push(urow("change" + hs, "~", r.aNum, r.bNum, renderWords(r.words), hs ? hmeta("change", r.aNum) : ""));
         } else {
-          html.push(urow("change" + hs, "−", r.aNum, null, renderWords(r.aWords)));
+          html.push(urow("change" + hs, "−", r.aNum, null, renderWords(r.aWords), hs ? hmeta("change", r.aNum) : ""));
           html.push(urow("change", "+", null, r.bNum, renderWords(r.bWords)));
         }
       }
@@ -114,7 +120,7 @@
       } else { // change
         left = scol("chg", r.aNum, renderWords(r.aWords)); right = scol("chg b", r.bNum, renderWords(r.bWords));
       }
-      html.push('<div class="srow' + hs + '">' + left + right + "</div>");
+      html.push('<div class="srow' + hs + '"' + (hs ? hmeta(r.type, r.type === "add" ? r.bNum : r.aNum) : "") + '>' + left + right + "</div>");
       prevImp = imp;
     }
     return html.join("");
@@ -173,12 +179,47 @@
     hunks = [].slice.call(result.querySelectorAll(".hstart"));
     hunkIdx = -1;
     updateNav();
+    renderPips();
   }
   function updateNav() {
     if (!navPrev) return;
     const n = hunks.length;
     navPrev.disabled = n === 0; navNext.disabled = n === 0;
     navCount.textContent = n === 0 ? "—" : (hunkIdx < 0 ? (n + (n === 1 ? " diff" : " diffs")) : (hunkIdx + 1) + " / " + n);
+    // 显隐挂在这里：hunks 状态的唯一汇聚点，错误态（render 边界置空 hunks）也会路过。
+    if (pipRail) pipRail.classList.toggle("hidden", n === 0);
+  }
+  // F-044 改动色标：轨道上每个 pip 对应一个 hunk，位置按文档相对高度铺排。
+  // 类型与行号读 hunk 首行的 data-htype/data-hline（视图无关），不碰用户文本。
+  function renderPips() {
+    if (!pipRail) return;
+    if (!hunks.length) { pipRail.innerHTML = ""; return; }
+    // 先把几何一次读完，再开始写 DOM——读写交错会让每次迭代都强制同步布局，
+    // 大 diff 下 wrap/resize 一次就是一串 reflow。
+    const total = result.scrollHeight || 1;
+    const tops = hunks.map((h) => ((h.offsetTop / total) * 100).toFixed(2) + "%");
+    // innerHTML 重建会销毁真实键盘焦点：记下焦点停在哪个 pip，重建后还给同一序号。
+    const ae = document.activeElement;
+    const focusIdx = ae && pipRail.contains(ae) && ae.dataset && ae.dataset.pip != null ? Number(ae.dataset.pip) : -1;
+    const NAME = { add: "added", del: "removed", change: "changed" };
+    const html = [];
+    for (let i = 0; i < hunks.length; i++) {
+      const type = hunks[i].dataset.htype || "change";
+      const line = hunks[i].dataset.hline || "";
+      const label = (NAME[type] || "changed") + (line ? " · line " + line : "");
+      html.push('<button type="button" class="pip ' + (NAME[type] ? type : "change") +
+        '" data-pip="' + i + '" title="' + label + '" aria-label="Jump to ' + label + '"></button>');
+    }
+    pipRail.innerHTML = html.join("");
+    const kids = pipRail.children;
+    for (let i = 0; i < kids.length; i++) {
+      // 几何是数据不是样式：仅 top 由 JS 写入，颜色与形态全部留在 app.css
+      //（specs 技术决策 1 对「禁内联 style」的显式豁免，范围仅此一个属性）。
+      kids[i].style.top = tops[i];
+    }
+    // 幂等复原当前态：任何原因重建轨道（wrap 切换、resize）后不丢 .current。
+    if (hunkIdx >= 0 && kids[hunkIdx]) kids[hunkIdx].classList.add("current");
+    if (focusIdx >= 0 && kids[focusIdx]) kids[focusIdx].focus({ preventScroll: true });
   }
   function jump(dir) {
     if (!hunks.length) return;
@@ -188,6 +229,10 @@
     const el = hunks[hunkIdx];
     el.classList.add("jumped");
     el.scrollIntoView({ block: "center" });
+    if (pipRail) {
+      const ps = pipRail.children;
+      for (let i = 0; i < ps.length; i++) ps[i].classList.toggle("current", i === hunkIdx);
+    }
     updateNav();
   }
 
@@ -306,8 +351,13 @@
   linkScroll(ta, tb);
   linkScroll(tb, ta);
   [optWs, optCase, optBlank, optChar].forEach((el) => el.addEventListener("change", () => { render(); persistOpts(); }));
-  optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); persistOpts(); });
+  // wrap 只切 class 不重 render，但换行改变每行 offsetTop —— pip 位置必须跟着重算。
+  optWrap.addEventListener("change", () => { result.classList.toggle("wrap", optWrap.checked); renderPips(); persistOpts(); });
   if (optWsShow) optWsShow.addEventListener("change", () => { showWs = optWsShow.checked; render(); persistOpts(); });
+  // 窗口宽度变化在 wrap 下同样改写几何。只重定位（renderPips），不重算 diff——
+  // 与输入的 schedule() 防抖分开：resize 不该触发引擎重跑。
+  let rt;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderPips, 120); });
   if (optFold) optFold.addEventListener("change", () => { fold = optFold.checked; render(); persistOpts(); });
   // Expand a collapsed band when its placeholder is clicked.
   result.addEventListener("click", (e) => {
@@ -352,6 +402,13 @@
   });
   if (navPrev) navPrev.addEventListener("click", () => jump(-1));
   if (navNext) navNext.addEventListener("click", () => jump(1));
+  // pip 点击跳转：委托一个监听，复用 stats 点击的既有模式（hunkIdx = i-1 再 jump(1)）。
+  if (pipRail) pipRail.addEventListener("click", (e) => {
+    const p = e.target.closest("[data-pip]");
+    if (!p || !hunks.length) return;
+    hunkIdx = Number(p.dataset.pip) - 1;
+    jump(1);
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       let closed = false;

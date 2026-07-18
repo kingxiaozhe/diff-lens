@@ -22,17 +22,26 @@ function patchAppliesTo(patch, textA) {
   if (patch === "") return true;
   const aLines = textA.split(/\r\n|\r|\n/);
   const lines = patch.split("\n");
-  let aPos = null;
+  let aPos = null, aLeft = null, bLeft = null;
   for (const ln of lines) {
     const h = ln.match(/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/);
-    if (h) { aPos = parseInt(h[1], 10); continue; }
+    if (h) {
+      if (aLeft !== null && (aLeft !== 0 || bLeft !== 0)) return false; // 上一 hunk 计数不符
+      aPos = parseInt(h[1], 10); aLeft = parseInt(h[2], 10); bLeft = parseInt(h[4], 10);
+      continue;
+    }
     if (aPos === null) continue;
     if (ln.startsWith(" ") || ln.startsWith("-")) {
+      if (aLeft <= 0) return false;                      // hunk 声称的 A 行数超支(r1 采纳:计数也要验)
       if (aLines[aPos - 1] !== ln.slice(1)) return false;
-      aPos++;
+      aPos++; aLeft--;
+    }
+    if (ln.startsWith(" ") || ln.startsWith("+")) {
+      if (bLeft <= 0) return false;
+      bLeft--;
     }
   }
-  return true;
+  return aLeft === null || (aLeft === 0 && bLeft === 0); // 末 hunk 计数收平
 }
 
 // Sanity: the checker itself must pass a known-good patch and fail a corrupted one
@@ -43,6 +52,8 @@ function patchAppliesTo(patch, textA) {
   ok(patchAppliesTo(good, goodA), "checker: green on a known-good patch");
   const broken = good.replace("@@ -1,3", "@@ -2,3");
   ok(!patchAppliesTo(broken, goodA), "checker: red on a deliberately mis-numbered patch");
+  const badCount = good.replace(/@@ -1,(\d+)/, "@@ -1,99");
+  ok(!patchAppliesTo(badCount, goodA), "checker: red on a corrupted hunk COUNT (r1 采纳项)");
 })();
 
 // THE BUG (red before fix): blank-line-bearing files + ignoreBlankLines.

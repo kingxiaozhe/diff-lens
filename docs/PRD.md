@@ -21,10 +21,11 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 | ---- | ---- | ---- |
 | 2026-07-16 | v1 | 从 v0.2.0 代码反向提炼，供 UI 重设计 |
 | 2026-07-17 | v2 | 合入第一轮重设计落地结果为新基线；沉淀 Stitch 否稿教训为硬约束 9–11；F-044 立为待决 |
+| 2026-07-17 | v2.1 | **F-044 经人工确认纳入本轮**（本轮唯一功能新增），档位注记与 Stitch 提示词同步更新 |
 
 ## 设计基准档位
 
-**② 结构基准**——功能集不变，布局与信息架构可重做。
+**② 结构基准（含一项经批准的新增）**——布局与信息架构可重做；功能集 = F-001~F-043 不多不少，外加 **F-044 滚动条改动色标**（2026-07-17 人工确认纳入，本轮唯一功能新增，见「本轮新增」一节）。
 
 - **可动**：视觉语言、布局、栅格、控件形态、信息分组与优先级、间距与字号
 - **不可动**：下方「功能需求」的每一条（不多不少）、「硬约束」的每一条
@@ -135,6 +136,13 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 42. [F-042] 两个输入区内容、视图选择、所有选项**跨次打开保持**
 43. [F-043] 顶部常驻**隐私声明**：`🔒 100% local · no upload, no account, no ads`——这是产品最核心的差异点，不能弱化
 
+### 本轮新增（v2.1 批准，2026-07-17）
+
+44. [F-044] **滚动条改动色标（minimap pips）**：结果区滚动条一侧以语义色 pip 标出**所有改动的相对位置**（绿=增、红=删、琥珀=改、强调色=当前跳转目标），点击 pip 跳到对应差异。服务长文档导航。
+    - 类型区分不得只靠颜色（悬停 tooltip 或形态差异需给出至少一种）
+    - 空态/无差异时 pip 轨道不显示或显示为空轨，不得留视觉噪声
+    - 来源：上一轮 Stitch 稿唯一被采纳的新功能想法；实现侧引擎不变，仅消费现有 hunks 数据
+
 ## 状态与文案（每个状态都要有画面）
 
 | 状态 | 触发条件 | 文案（原文，勿改动语义） |
@@ -143,14 +151,14 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 | 完全相同 | 无任何差异 | `✓ The two texts are identical.` |
 | 相同（因忽略选项） | 开了忽略项后无差异 | `✓ The two texts are identical (with the chosen ignore options).` |
 | 仅次要差异 | 只剩被忽略的差异 | 统计行前缀 `No important differences` |
-| 对比失败 | 引擎抛错/输入病态 | `Couldn't compare this input (原因). Try smaller or simpler text.` + 统计行 `Comparison error` |
+| 对比失败 | 引擎抛错/输入病态 | `Couldn’t compare this input (原因). Try smaller or simpler text.` + 统计行 `Comparison error` |
 | 文件过大 | > 5 MB | `That file is too large (X.X MB). DiffLens handles up to 5 MB locally.` |
-| 文件读取失败 | FileReader 出错 | `Couldn't read that file.` |
+| 文件读取失败 | FileReader 出错 | `Couldn’t read that file.` |
 | 导出时两侧相同 | 无差异可导出 | `Nothing to export — the two texts are identical.` |
 | 保存时为空 | A、B 均空 | `Nothing to save yet — paste or type some text first.` |
 | 快照过大 | > 500 KB | `This comparison is too large to save to history.` |
 | JSON 两侧都无效 | Format JSON 失败 | `No valid JSON to format on either side.` |
-| JSON 单侧有效 | 只格式化了一侧 | `Formatted the valid JSON side; the other isn't valid JSON.` |
+| JSON 单侧有效 | 只格式化了一侧 | `Formatted the valid JSON side; the other isn’t valid JSON.` |
 | 历史空 | 无保存记录 | `No saved comparisons yet.` |
 
 > 注意：这些提示当前**全部复用统计行**显示，没有独立的消息/toast 区域。新设计可以引入更合适的承载方式，但**不得增加需要用户手动关闭的模态**。
@@ -189,8 +197,7 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 
 ## 开放问题
 
-1. [待决 · 本轮开画前需先拍板] **F-044 滚动条改动色标（minimap pips）** —— 上一轮 Stitch 稿贡献的好想法：滚动条/结果区侧沿打彩色 pip 标出改动位置，长文档导航很有用。**属新功能，纳入即突破「功能集不变」的 ② 档位**，需人工确认后才能进入本轮设计范围；未拍板前 Stitch 提示词不含它
-2. [搁置 · 与 UI 无关，不阻塞本轮] **内部品牌残留** —— `window.ClearDiff`（diff.js 导出）、`cleardiff-*`（background.js 菜单 id）、diff.js/app.js 顶部注释仍是旧名。用户不可见；改名会触及声明不动的 `diff.js`/`background.js`，且菜单 id 改名会让升级后的旧右键菜单变孤儿——需单独评估
+1. [搁置 · 与 UI 无关，不阻塞本轮] **内部品牌残留** —— `window.ClearDiff`（diff.js 导出）、`cleardiff-*`（background.js 菜单 id）、diff.js/app.js 顶部注释仍是旧名。用户不可见；改名会触及声明不动的 `diff.js`/`background.js`，且菜单 id 改名会让升级后的旧右键菜单变孤儿——需单独评估
 
 ### v1 遗留问题处置记录（2026-07-17，均已并入上文基线）
 
@@ -198,6 +205,7 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 - `body.popup` 死代码 → ✅ 已彻底移除，新布局由 `.app` 承载 `height:100vh`
 - 窄窗口/分屏 → ✅ 900px 单断点，620px 实测无横向溢出
 - 用户可见品牌残留 → ✅ 已修（文件过大提示现为 `DiffLens handles up to 5 MB locally.`）
+- F-044 滚动条改动色标 → ✅ 2026-07-17 人工确认**纳入本轮**（v2.1），正式条目见「本轮新增」
 
 ---
 
@@ -205,7 +213,7 @@ v2 说明：基于 v1 的第一轮重设计已于 2026-07-17 落地（见「现�
 
 > 用法：Stitch 选 **Web** 模式，粘贴下面这段作为首轮提示；出图后再用「状态清单」逐个补画。
 > v2 变化：提示词改为以已落地的五段工作台布局为起点，并把上一轮否稿的三条教训写成显式禁令。
-> F-044（滚动条改动色标）未拍板，提示词刻意不含——若决定纳入，自行在末尾加一段。
+> v2.1：F-044 已批准纳入，提示词第 4 段含 change-marker rail 描述。
 
 ```text
 Redesign the visual language of "DiffLens", a privacy-first text comparison (diff)
@@ -239,6 +247,12 @@ inventing or removing features):
    - full-width rows tinted by change type
    - word-level highlights inside changed lines
    - a "moved" badge for lines that were relocated
+   - NEW in this round: a slim change-marker rail along the result area's
+     scrollbar edge — tiny colored pips showing the relative position of every
+     change in the document (green = added, red = removed, amber = modified,
+     accent = current jump target). Clicking a pip jumps to that difference.
+     Show it subtly; it must not compete with the text for attention, and it
+     disappears when there are no differences.
 5. A bottom status bar: a stats line "+12 added - 3 removed - 2 minor -
    1 moved - A: 40 lines, B: 49 lines" (added/removed counts clickable to jump
    to the first such difference), previous/next difference buttons with a
@@ -273,7 +287,7 @@ Also design these states:
 
 ### Stitch 出图后的核对清单
 
-- [ ] 43 条功能点是否都有落点（尤其易被漏掉的：滚动联动、次要差异淡化、移动徽章、行号双列、符号栏）
+- [ ] 44 条功能点是否都有落点（尤其易被漏掉的：滚动联动、次要差异淡化、移动徽章、行号双列、符号栏、**新增的 F-044 pip 轨道**）
 - [ ] 暗色主题是否同时给了
 - [ ] 是否混入了不该有的东西（登录、Pro、分享、云同步、广告位）
 - [ ] 信息密度是否被"设计感"稀释（留白过大 = 一屏读不了几行 = 与产品定位相悖）

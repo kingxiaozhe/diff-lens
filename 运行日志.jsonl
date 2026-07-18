@@ -16,3 +16,36 @@
 {"at":"2026-07-17T13:03:50Z","node":"N4","feature":"1.compare-page-redesign","task":"","event":"resume","detail":"磁盘并未满——是三个审查agent并发跑浏览器时的瞬时拥塞,它们退出后自行释放。我误判成了持久阻塞"}
 {"at":"2026-07-17T13:38:46Z","node":"N4","feature":"1.compare-page-redesign","task":"T-002..004","event":"review","detail":"补做的代码审查收尾：三路对抗子agent，报31条全部采纳修复，13个变异测试全部拦截；轮次1，通道=子agent对抗(Codex未装)"}
 {"at":"2026-07-17T13:38:46Z","node":"N8","feature":"1.compare-page-redesign","task":"","event":"done","detail":"全部完成：6任务/16验收/3份审查凭证，124项测试全绿，文档已对齐"}
+{"at":"2026-07-18T00:27:56+0800","node":"N1","feature":"2.visual-refresh-and-change-rail","task":"","event":"node_enter","detail":"初始化：扫描到2个feature，feature1已完成"}
+{"at":"2026-07-18T00:27:56+0800","node":"N1","feature":"2.visual-refresh-and-change-rail","task":"","event":"pause","detail":"入口闸：规格awaiting_review，等用户明确回复开始"}
+{"at":"2026-07-18T00:30:38+0800","node":"N1","feature":"2.visual-refresh-and-change-rail","task":"","event":"resume","detail":"用户明确回复开始，规格已审批"}
+{"at":"2026-07-18T00:31:41+0800","node":"N3","feature":"2.visual-refresh-and-change-rail","task":"T-001","event":"task_start","detail":"防护网基线：跑三条存量测试"}
+{"at":"2026-07-18T00:33:23+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-001","event":"review","detail":"1轮 codex核验通过 拦截0"}
+{"at":"2026-07-18T00:33:23+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-001","event":"task_done","detail":"基线全绿 48/19/57"}
+{"at":"2026-07-18T00:34:53+0800","node":"N3","feature":"2.visual-refresh-and-change-rail","task":"T-002","event":"task_start","detail":"pip 轨道整体实现"}
+{"at":"2026-07-18T00:40:12+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-002","event":"review","detail":"1轮 codex 拦截0采纳0忽略2(一条属存量语义一致性,一条属T-003既定范围)"}
+{"at":"2026-07-18T00:40:12+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-002","event":"task_done","detail":"pip轨道落地,unified/split语义正确,124断言全绿"}
+{"at":"2026-07-18T00:41:21+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"T-002","event":"qa","detail":"合并至feature级(评分9但F-044几何路径未完,现跑必报已知未完成项)"}
+{"at":"2026-07-18T00:41:21+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"T-002","event":"decision","detail":"选:QA合并至feature级/弃:立即全量QA——避免背靠背双跑,T-006完成时必触发条款兜底"}
+{"at":"2026-07-18T00:41:21+0800","node":"N3","feature":"2.visual-refresh-and-change-rail","task":"T-004","event":"task_start","detail":"视觉层token与控件态精修"}
+{"at":"2026-07-18T00:47:04+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-004","event":"review","detail":"2轮 codex 拦截2(mark裸圆角/按压态缺口) r2 approved"}
+{"at":"2026-07-18T00:47:04+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-004","event":"task_done","detail":"视觉精修落地,双主题截图核验,smoke 57全绿"}
+{"at":"2026-07-18T00:47:04+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"T-004","event":"qa","detail":"跳过:评分7(单文件纯视觉)"}
+{"at":"2026-07-18T00:53:31+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-003","event":"review","detail":"2轮 codex 拦截2(焦点丢失/布局抖动) r2 approved"}
+{"at":"2026-07-18T00:53:31+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-003","event":"task_done","detail":"几何三入口落地,走查九项全过"}
+{"at":"2026-07-18T00:53:31+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"T-003","event":"qa","detail":"合并至feature级(评分8,沿用T-002决策,T-006后必触发)"}
+{"at":"2026-07-18T01:02:56+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-005","event":"review","detail":"2轮 codex 拦截2(旧DOM骗绿/视口写死) r2 approved"}
+{"at":"2026-07-18T01:02:56+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-005","event":"task_done","detail":"smoke 57→68,含反假绿灯三条,全绿"}
+{"at":"2026-07-18T01:02:56+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"T-005","event":"qa","detail":"跳过:纯测试资产,feature级QA在T-006后必触发"}
+{"at":"2026-07-18T01:03:30+0800","node":"N3","feature":"2.visual-refresh-and-change-rail","task":"T-006","event":"task_start","detail":"走查与文档同步"}
+{"at":"2026-07-18T01:10:40+0800","node":"N4","feature":"2.visual-refresh-and-change-rail","task":"T-006","event":"review","detail":"2轮 codex 拦截3(PRD引号x3归一/圆角措辞x2) 2轮后措辞放行(分歧记LESSONS)"}
+{"at":"2026-07-18T01:10:40+0800","node":"N5","feature":"2.visual-refresh-and-change-rail","task":"T-006","event":"task_done","detail":"走查全绿:15文案/27id/三档宽度/a11y,文档已同步"}
+{"at":"2026-07-18T01:14:21+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"","event":"qa","detail":"feature级QA通过:68+48+19+5断言,14AC全过;边界检查抓出提交污染已拆分"}
+{"at":"2026-07-18T01:14:21+0800","node":"N6","feature":"2.visual-refresh-and-change-rail","task":"","event":"error","detail":"并行/cm:fix的diff.js修复被T-006 add -A误并入,已重写拆分为bf4c64a,教训入LESSONS"}
+{"at":"2026-07-18T01:14:21+0800","node":"N8","feature":"2.visual-refresh-and-change-rail","task":"","event":"done","detail":"feature完成:6任务全过,README/ARCHITECTURE已同步"}
+{"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "task_start", "detail": "缺陷闭环开工:ignoreBlankLines导出补丁不可应用"}
+{"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "decision", "detail": "2.5根因对抗确认不触发:四客观条件全空(波及面2处/同层/非观测/非升级)"}
+{"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "review", "detail": "Codex主通道2轮:r1 approved+1条非阻塞采纳,r2零发现;凭证r1/r2已落"}
+{"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "task_done", "detail": "红转绿,141项全绿,git apply真实裁判通过"}
+{"at": "2026-07-18T01:20:18+0800", "node": "FIX", "feature": "fix", "task": "fixes/2026-07-18-unified-blank-lines", "event": "done", "detail": "档案/METRICS/LESSONS落盘,提交入库"}
+{"at": "2026-07-18T09:12:43+08:00", "node": "REFACTOR", "feature": "refactor", "task": "app-js-split", "event": "node_enter", "detail": "G0可行性:侦察app.js结构与动机指标"}

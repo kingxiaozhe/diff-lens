@@ -31,6 +31,9 @@ default and changes are highlighted down to the word.
 - **Right-click → "set as Text A/B"** to capture selections from any page (even
   across two tabs), then compare.
 - **Jump between differences** (↑/↓ or Alt+↑/↓) with a hunk counter.
+- **A change-marker rail** beside the result — one colored pip per change (green
+  added / red removed / amber modified) at its position in the document; click a
+  pip to jump straight there. Great for long documents.
 - **Show whitespace** — reveal spaces (·), tabs (→) and trailing whitespace.
 - **Unimportant differences** — when you ignore whitespace/case, those diffs are
   dimmed (still visible), not silently dropped (Beyond Compare's 3-state model).

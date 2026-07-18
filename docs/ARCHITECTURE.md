@@ -46,6 +46,13 @@ web app": private, prose-friendly, free.
   result surface has no toolbar above or below it. Every grid item sets an explicit
   `min-height: 0` — grid's `auto` default lets content burst past `100vh` and drags
   the whole page into scrolling.
+- **Change-marker rail (F-044):** a slim rail beside the result shows one pip per
+  hunk at its relative document position; clicking a pip jumps there. Pips read
+  `data-htype`/`data-hline` stamped on each hunk's first row — view-independent
+  metadata, because split's type classes live on child nodes and reading view DOM
+  broke there. Geometry (style.top only) is JS-written data; colors stay in CSS.
+  The rail rebuilds on render and repositions on wrap toggle and a debounced
+  window resize; rebuilds restore the current marker and keyboard focus by index.
 - `diff.js` — dependency-free engine (LCS over lines with common prefix/suffix trim;
   positional del↔add pairing within a changed block; word-level LCS for intra-line
   highlight). Attaches to `window` so it's unit-testable in Node.
@@ -86,7 +93,11 @@ web app": private, prose-friendly, free.
   cap so a huge file can't lag the tab. Needs no extra permission — stays 100% local.
 - **Built since MVP:** side-by-side (split) view toggle; ignore-blank-lines; word/char-level
   toggle (with auto char-refine for no-space path/URL lines). Real source line numbers
-  preserved even when blank lines are ignored.
+  preserved even when blank lines are ignored. Round-2 visual pass: the main control
+  and surface radii now come from two tokens (`--r-ctl`/`--r-box`); small
+  decorative radii stay literal by design. Plus 120ms control transitions with
+  pressed states and themed scrollbars — density and the semantic color contract
+  untouched.
 - **Beyond Compare-grade pass:** next/prev difference navigation (Alt+↑/↓) with hunk
   counter; whitespace visualization (·, →); distinct amber colour for *changed* lines
   vs pure add/del; and a 3-state diff model — ignored whitespace/case differences become
