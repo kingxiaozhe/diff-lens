@@ -1,5 +1,8 @@
 # DiffLens — Private Text Compare
 
+[![CI](https://github.com/kingxiaozhe/diff-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kingxiaozhe/diff-lens/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A fast, **100% private** text diff that lives in your browser. Paste or right-click
 two pieces of text and instantly see a clear, readable difference — **nothing
 uploaded, no account, no ads, no paywall.**
@@ -8,6 +11,17 @@ Unlike diffchecker.com and friends, DiffLens never sends your text anywhere: it
 requests **no host permissions and makes no network calls** (only `storage` +
 `contextMenus`). Built for comparing **prose**, not just code — word-wrap is on by
 default and changes are highlighted down to the word.
+
+![DiffLens private text comparison](store-assets/screenshot-1-private.jpg)
+
+## Install
+
+1. Download and extract the latest ZIP from
+   [Releases](https://github.com/kingxiaozhe/diff-lens/releases), or clone this
+   repository.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Choose **Load unpacked** and select the extracted directory.
+4. Click the DiffLens toolbar icon to open the full-page comparison workbench.
 
 ## Features
 
@@ -85,4 +99,4 @@ modules (render / nav / export / history UI / file loading) · `app.js` (orchest
 only — wiring, state, bindings). See `docs/ARCHITECTURE.md` for design decisions
 and known limitations.
 
-> Name is provisional. 100% local — your text never leaves your browser.
+100% local — your text never leaves your browser.
